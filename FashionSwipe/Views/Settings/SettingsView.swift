@@ -1,18 +1,63 @@
 import SwiftUI
 
 struct SettingsView: View {
+    @EnvironmentObject private var viewModel: SwipeViewModel
+    @State private var draft: UserProfile = .default
+
     var body: some View {
         NavigationStack {
-            VStack(spacing: 16) {
-                Image(systemName: "gearshape")
-                    .font(.system(size: 60))
-                    .foregroundColor(.gray.opacity(0.4))
-                Text("設定画面（準備中）")
-                    .font(.headline)
-                    .foregroundColor(.secondary)
+            Form {
+                Section("プロフィール") {
+                    TextField("表示名", text: $draft.displayName)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled(true)
+                }
+
+                Section("表示カテゴリ") {
+                    Picker("カテゴリ", selection: $draft.category) {
+                        ForEach(UserProfile.Category.allCases) { category in
+                            Text(category.displayName).tag(category)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                Section("価格帯") {
+                    Picker("価格帯", selection: $draft.priceRange) {
+                        ForEach(UserProfile.PriceRange.allCases) { range in
+                            Text(range.displayName).tag(range)
+                        }
+                    }
+                    .pickerStyle(.inline)
+                    .labelsHidden()
+                }
+
+                Section("好きなスタイル") {
+                    ForEach(UserProfile.availableStyles, id: \.self) { style in
+                        Toggle(style, isOn: bindingForStyle(style))
+                    }
+                }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .navigationTitle("設定")
+            .onAppear { draft = viewModel.profile }
+            .onChange(of: draft) { _, newValue in
+                viewModel.updateProfile(newValue)
+            }
         }
+    }
+
+    private func bindingForStyle(_ style: String) -> Binding<Bool> {
+        Binding(
+            get: { draft.favoriteStyles.contains(style) },
+            set: { isOn in
+                if isOn {
+                    if !draft.favoriteStyles.contains(style) {
+                        draft.favoriteStyles.append(style)
+                    }
+                } else {
+                    draft.favoriteStyles.removeAll { $0 == style }
+                }
+            }
+        )
     }
 }
