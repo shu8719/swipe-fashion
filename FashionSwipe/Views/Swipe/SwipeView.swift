@@ -39,6 +39,7 @@ struct SwipeView: View {
                         likeOpacity: likeOpacity,
                         nopeOpacity: nopeOpacity
                     )
+                    .id(top.id)
                     .gesture(dragGesture)
                     .animation(.interactiveSpring(response: 0.3, dampingFraction: 0.7), value: offset)
                 }
@@ -62,14 +63,44 @@ struct SwipeView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "tshirt")
+        VStack(spacing: 20) {
+            Image(systemName: hasActiveFilter ? "line.3.horizontal.decrease.circle" : "checkmark.circle")
                 .font(.system(size: 60))
                 .foregroundColor(.gray.opacity(0.4))
-            Text("読み込み中...")
+
+            Text(hasActiveFilter ? "条件に合う商品がありません" : "現在表示できる商品がありません")
                 .font(.headline)
                 .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+
+            if hasActiveFilter {
+                VStack(spacing: 4) {
+                    Text("現在の表示カテゴリ：\(viewModel.profile.category.displayName)")
+                    Text("現在の価格帯：\(viewModel.profile.priceRange.displayName)")
+                }
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+
+                Button {
+                    viewModel.resetFilters()
+                } label: {
+                    Text("条件をリセット")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 12)
+                        .background(Color.accentColor)
+                        .clipShape(Capsule())
+                }
+                .padding(.top, 8)
+            }
         }
+        .padding(.horizontal, 20)
+    }
+
+    private var hasActiveFilter: Bool {
+        viewModel.profile.category != .all || viewModel.profile.priceRange != .all
     }
 
     // MARK: - Swipe Logic
@@ -109,11 +140,11 @@ struct SwipeView: View {
             offset = CGSize(width: targetX, height: offset.height)
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
-            offset = .zero
             switch direction {
             case .like:    viewModel.like()
             case .dislike: viewModel.dislike()
             }
+            offset = .zero
         }
     }
 

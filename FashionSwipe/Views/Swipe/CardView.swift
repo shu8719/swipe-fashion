@@ -41,7 +41,6 @@ struct CardView: View {
                         .overlay(Image(systemName: "photo").foregroundColor(.gray))
                 default:
                     Color.gray.opacity(0.1)
-                        .overlay(ProgressView())
                 }
             }
             .frame(height: 400)
