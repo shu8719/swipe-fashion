@@ -30,7 +30,7 @@ def _build_user_vector(user_id: int) -> np.ndarray | None:
             """
             SELECT it.tag_category, it.tag_value, COUNT(*) AS cnt
             FROM user_actions ua
-            JOIN item_tags it ON it.item_id = ua.item_id
+            JOIN item_tags it ON it.item_code = ua.item_code
             WHERE ua.user_id=? AND ua.action='LIKE'
             GROUP BY it.tag_category, it.tag_value
             """,
@@ -41,7 +41,7 @@ def _build_user_vector(user_id: int) -> np.ndarray | None:
             """
             SELECT it.tag_category, it.tag_value, COUNT(*) AS cnt
             FROM user_actions ua
-            JOIN item_tags it ON it.item_id = ua.item_id
+            JOIN item_tags it ON it.item_code = ua.item_code
             WHERE ua.user_id=? AND ua.action='SKIP'
             GROUP BY it.tag_category, it.tag_value
             """,

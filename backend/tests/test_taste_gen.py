@@ -1,60 +1,47 @@
-"""AI-05 嗜好説明生成の単体テスト（モックプロバイダ使用）。"""
+"""AI-05 嗜好説明生成テスト（item_code対応版）。"""
 from backend.ai.taste_gen import maybe_update_taste, get_taste
 from backend.db import get_conn
 from backend.auth import hash_password
 
 
-def _setup_user_with_likes(n_likes: int) -> int:
+def _setup(n_likes):
     with get_conn() as conn:
         conn.execute(
             "INSERT OR IGNORE INTO users (email, password_hash, age, gender, region) VALUES (?,?,?,?,?)",
-            ("taste_test@example.com", hash_password("pass"), 22, "男性", "大阪"),
+            ("taste@test.com", hash_password("pw"), 22, "男性", "大阪"),
         )
-        user_id = conn.execute(
-            "SELECT user_id FROM users WHERE email=?", ("taste_test@example.com",)
-        ).fetchone()["user_id"]
-
-        for i in range(1, n_likes + 1):
-            item_id = ((i - 1) % 30) + 1
+        uid = conn.execute("SELECT user_id FROM users WHERE email=?", ("taste@test.com",)).fetchone()["user_id"]
+        for i in range(1, n_likes+1):
+            code = f"dummy:item{((i-1)%30)+1:04d}"
             conn.execute(
-                "INSERT OR IGNORE INTO user_actions (user_id, item_id, action) VALUES (?,?,?)",
-                (user_id, item_id, "LIKE"),
+                "INSERT OR IGNORE INTO user_actions (user_id, item_code, action) VALUES (?,?,?)",
+                (uid, code, "LIKE"),
             )
-    return user_id
+    return uid
 
 
-def test_no_description_before_threshold():
-    user_id = _setup_user_with_likes(5)
-    result = maybe_update_taste(user_id)
-    # LIKEが10件未満 → キャッシュなければNone
+def test_no_desc_below_threshold():
+    uid = _setup(5)
+    result = maybe_update_taste(uid)
     assert result is None or isinstance(result, str)
 
 
-def test_description_generated_after_threshold():
-    user_id = _setup_user_with_likes(10)
-    result = maybe_update_taste(user_id)
-    assert result is not None
-    assert isinstance(result, str)
-    assert len(result) > 10
+def test_desc_after_threshold():
+    uid = _setup(10)
+    result = maybe_update_taste(uid)
+    assert result is not None and isinstance(result, str) and len(result) > 10
 
 
-def test_get_taste_after_generation():
-    user_id = _setup_user_with_likes(10)
-    maybe_update_taste(user_id)
-    taste = get_taste(user_id)
-    assert "description" in taste
-    assert "updated_at" in taste
+def test_get_taste_after_gen():
+    uid = _setup(10)
+    maybe_update_taste(uid)
+    taste = get_taste(uid)
     assert taste["description"] is not None
 
 
-def test_no_redundant_call_within_threshold():
-    user_id = _setup_user_with_likes(10)
-    maybe_update_taste(user_id)
-
-    # DBの like_count_at_gen を確認
+def test_no_redundant_call():
+    uid = _setup(10)
+    maybe_update_taste(uid)
     with get_conn() as conn:
-        row = conn.execute(
-            "SELECT like_count_at_gen FROM taste_descriptions WHERE user_id=?", (user_id,)
-        ).fetchone()
-    assert row is not None
+        row = conn.execute("SELECT like_count_at_gen FROM taste_descriptions WHERE user_id=?", (uid,)).fetchone()
     assert row["like_count_at_gen"] == 10

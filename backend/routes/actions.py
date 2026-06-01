@@ -10,19 +10,19 @@ _VALID_ACTIONS = {"LIKE", "SKIP"}
 @bp.post("")
 @login_required
 def post_action():
-    data   = request.get_json(force=True) or {}
-    item_id = data.get("item_id")
-    action  = str(data.get("action", "")).upper()
+    data      = request.get_json(force=True) or {}
+    item_code = str(data.get("item_code") or data.get("item_id") or "").strip()
+    action    = str(data.get("action", "")).upper()
 
-    if not item_id or action not in _VALID_ACTIONS:
-        return jsonify({"error": "item_id と action(LIKE/SKIP) が必要やよ"}), 400
+    if not item_code or action not in _VALID_ACTIONS:
+        return jsonify({"error": "item_code と action(LIKE/SKIP) が必要やよ"}), 400
 
     with get_conn() as conn:
-        if not conn.execute("SELECT 1 FROM items WHERE item_id=?", (item_id,)).fetchone():
+        if not conn.execute("SELECT 1 FROM items WHERE item_code=?", (item_code,)).fetchone():
             return jsonify({"error": "その商品は存在しないね"}), 404
         conn.execute(
-            "INSERT INTO user_actions (user_id, item_id, action) VALUES (?,?,?)",
-            (g.user_id, item_id, action),
+            "INSERT INTO user_actions (user_id, item_code, action) VALUES (?,?,?)",
+            (g.user_id, item_code, action),
         )
 
     return jsonify({"ok": True})

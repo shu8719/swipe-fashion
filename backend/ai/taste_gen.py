@@ -27,10 +27,10 @@ def _get_user_context(user_id: int) -> dict:
 
         likes = conn.execute(
             """
-            SELECT i.name, it.tag_category, it.tag_value
+            SELECT i.item_name, it.tag_category, it.tag_value
             FROM user_actions ua
-            JOIN items i ON i.item_id = ua.item_id
-            JOIN item_tags it ON it.item_id = ua.item_id
+            JOIN items i ON i.item_code = ua.item_code
+            JOIN item_tags it ON it.item_code = ua.item_code
             WHERE ua.user_id=? AND ua.action='LIKE'
             ORDER BY ua.created_at DESC
             """,

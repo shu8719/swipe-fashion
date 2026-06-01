@@ -1,9 +1,46 @@
 import sqlite3
-import os
 from pathlib import Path
 from backend import config
 
 _SCHEMA = Path(__file__).parent / "schema.sql"
+
+_DUMMY_ITEMS = [
+    {"code": f"dummy:item{i:04d}", "name": n, "catch": c, "cap": cap, "price": p,
+     "shop": f"テストショップ{i%5}", "url": f"https://example.com/item/{i}",
+     "img": f"https://via.placeholder.com/400?text=Item{i}", "genre": 100000, "tags": t}
+    for i, (n, c, cap, p, t) in enumerate([
+        ("テスト韓国系Tシャツ",  "韓国系 オーバーサイズ 黒 モノトーン", "韓国系 モノトーン オーバーサイズ コットン", 2800, [("style","韓国系"),("color","モノトーン"),("silhouette","オーバーサイズ"),("material","コットン"),("price_range","低")]),
+        ("テストスリムデニム",    "カジュアル スリム デニム インディゴ", "カジュアル スリム デニム アースカラー", 5500, [("style","カジュアル"),("color","アースカラー"),("silhouette","スリム"),("material","デニム"),("price_range","中")]),
+        ("テスト韓国フーディ",   "韓国系 ゆったり グレー フード リラックス", "韓国系 モノトーン リラックス コットン", 3200, [("style","韓国系"),("color","モノトーン"),("silhouette","リラックス"),("material","コットン"),("price_range","低")]),
+        ("テストきれいめコート", "きれいめ チェスター オフィス ビジカジ", "きれいめ モノトーン スリム ニット", 12000, [("style","きれいめ"),("color","モノトーン"),("silhouette","スリム"),("material","ニット"),("price_range","高")]),
+        ("テストモードレザー",   "モード レザー タイト 黒 ビビッド", "モード モノトーン タイト レザー", 18000, [("style","モード"),("color","モノトーン"),("silhouette","タイト"),("material","レザー"),("price_range","高")]),
+        ("テストカーゴパンツ",   "ワーク カーゴ アースカラー カーキ", "ワーク アースカラー リラックス コットン", 7800, [("style","ワーク"),("color","アースカラー"),("silhouette","リラックス"),("material","コットン"),("price_range","中")]),
+        ("テストビビッドニット", "ストリート ビビッド カラー オーバーサイズ", "ストリート ビビッド オーバーサイズ ニット", 4200, [("style","ストリート"),("color","ビビッド"),("silhouette","オーバーサイズ"),("material","ニット"),("price_range","中")]),
+        ("テストシアーブラウス", "きれいめ ペールトーン シアー リラックス", "きれいめ ペールトーン リラックス シアー", 5900, [("style","きれいめ"),("color","ペールトーン"),("silhouette","リラックス"),("material","シアー"),("price_range","中")]),
+        ("テストグラフィックT",  "ストリート ビビッド グラフィック オーバーサイズ", "ストリート ビビッド オーバーサイズ コットン", 2500, [("style","ストリート"),("color","ビビッド"),("silhouette","オーバーサイズ"),("material","コットン"),("price_range","低")]),
+        ("テストワークシャツ",   "ワーク カーキ アウトドア リラックス", "ワーク アースカラー リラックス コットン", 6500, [("style","ワーク"),("color","アースカラー"),("silhouette","リラックス"),("material","コットン"),("price_range","中")]),
+        ("テストスウェット",     "カジュアル モノトーン オーバーサイズ", "カジュアル モノトーン オーバーサイズ コットン", 4800, [("style","カジュアル"),("color","モノトーン"),("silhouette","オーバーサイズ"),("material","コットン"),("price_range","中")]),
+        ("テストワイドパンツ",   "韓国系 モノトーン ワイド リラックス", "韓国系 モノトーン リラックス コットン", 4500, [("style","韓国系"),("color","モノトーン"),("silhouette","リラックス"),("material","コットン"),("price_range","中")]),
+        ("テストタートルニット", "きれいめ ペール ニット スリム", "きれいめ ペールトーン スリム ニット", 8800, [("style","きれいめ"),("color","ペールトーン"),("silhouette","スリム"),("material","ニット"),("price_range","中")]),
+        ("テストリネンシャツ",   "カジュアル アースカラー リネン リラックス", "カジュアル アースカラー リラックス コットン", 5200, [("style","カジュアル"),("color","アースカラー"),("silhouette","リラックス"),("material","コットン"),("price_range","中")]),
+        ("テストシースルー",     "モード ペール シアー スリム", "モード ペールトーン スリム シアー", 11000, [("style","モード"),("color","ペールトーン"),("silhouette","スリム"),("material","シアー"),("price_range","高")]),
+        ("テストデニムジャケット","カジュアル デニム アースカラー リラックス", "カジュアル アースカラー リラックス デニム", 9800, [("style","カジュアル"),("color","アースカラー"),("silhouette","リラックス"),("material","デニム"),("price_range","中")]),
+        ("テストビビッドパーカー","ストリート ビビッド オーバーサイズ フード", "ストリート ビビッド オーバーサイズ コットン", 5500, [("style","ストリート"),("color","ビビッド"),("silhouette","オーバーサイズ"),("material","コットン"),("price_range","中")]),
+        ("テストクロップジャケット","韓国系 モノトーン タイト クロップ", "韓国系 モノトーン タイト コットン", 7200, [("style","韓国系"),("color","モノトーン"),("silhouette","タイト"),("material","コットン"),("price_range","中")]),
+        ("テストカーゴショーツ", "ワーク カーキ アースカラー ショーツ", "ワーク アースカラー リラックス コットン", 4900, [("style","ワーク"),("color","アースカラー"),("silhouette","リラックス"),("material","コットン"),("price_range","中")]),
+        ("テストニットベスト",   "きれいめ ペール ピンク ニットベスト", "きれいめ ペールトーン スリム ニット", 3800, [("style","きれいめ"),("color","ペールトーン"),("silhouette","スリム"),("material","ニット"),("price_range","低")]),
+        ("テストスキニー黒",     "モード モノトーン スキニー タイト", "モード モノトーン タイト デニム", 13000, [("style","モード"),("color","モノトーン"),("silhouette","タイト"),("material","デニム"),("price_range","高")]),
+        ("テストカーディガン",   "カジュアル アースカラー ニット リラックス", "カジュアル アースカラー リラックス ニット", 6800, [("style","カジュアル"),("color","アースカラー"),("silhouette","リラックス"),("material","ニット"),("price_range","中")]),
+        ("テストビッグシャツ",   "韓国系 アースカラー オーバーサイズ ビッグ", "韓国系 アースカラー オーバーサイズ コットン", 3500, [("style","韓国系"),("color","アースカラー"),("silhouette","オーバーサイズ"),("material","コットン"),("price_range","低")]),
+        ("テストバギーデニム",   "ストリート モノトーン リラックス バギー", "ストリート モノトーン リラックス デニム", 8200, [("style","ストリート"),("color","モノトーン"),("silhouette","リラックス"),("material","デニム"),("price_range","中")]),
+        ("テストワイドトラウザー","きれいめ モノトーン ワイド リラックス", "きれいめ モノトーン リラックス コットン", 9500, [("style","きれいめ"),("color","モノトーン"),("silhouette","リラックス"),("material","コットン"),("price_range","中")]),
+        ("テストビビッドコート", "モード ビビッド グリーン オーバーサイズ", "モード ビビッド オーバーサイズ ニット", 16000, [("style","モード"),("color","ビビッド"),("silhouette","オーバーサイズ"),("material","ニット"),("price_range","高")]),
+        ("テストシアースカート", "きれいめ ペール シアー ロング", "きれいめ ペールトーン リラックス シアー", 6200, [("style","きれいめ"),("color","ペールトーン"),("silhouette","リラックス"),("material","シアー"),("price_range","中")]),
+        ("テストレザーパンツ",   "モード モノトーン タイト レザー バイカー", "モード モノトーン タイト レザー", 22000, [("style","モード"),("color","モノトーン"),("silhouette","タイト"),("material","レザー"),("price_range","高")]),
+        ("テストオーバーオール", "ワーク アースカラー コットン リラックス", "ワーク アースカラー リラックス コットン", 11000, [("style","ワーク"),("color","アースカラー"),("silhouette","リラックス"),("material","コットン"),("price_range","高")]),
+        ("テストニットT",        "カジュアル ペール イエロー ニット", "カジュアル ペールトーン リラックス ニット", 2900, [("style","カジュアル"),("color","ペールトーン"),("silhouette","リラックス"),("material","ニット"),("price_range","低")]),
+    ], start=1)
+]
 
 
 def get_conn() -> sqlite3.Connection:
@@ -21,48 +58,20 @@ def init_db():
 
 
 def seed_dummy_items():
-    """PoC用ダミー商品30件を投入する（累乗等でも再投入しても安全）。"""
-    items = [
-        (1,  "オーバーサイズTシャツ(黒)",  "ストリートブランドA", 2800, "https://via.placeholder.com/400?text=Item1",  "https://example.com/item/1",  [("style","ストリート"),("color","モノトーン"),("silhouette","オーバーサイズ"),("material","コットン"),("price_range","低")]),
-        (2,  "スキニーデニム(インディゴ)",  "カジュアルブランドB", 5500, "https://via.placeholder.com/400?text=Item2",  "https://example.com/item/2",  [("style","カジュアル"),("color","アースカラー"),("silhouette","スリム"),("material","デニム"),("price_range","中")]),
-        (3,  "韓国系フーディ(グレー)",      "韓国ブランドC",       3200, "https://via.placeholder.com/400?text=Item3",  "https://example.com/item/3",  [("style","韓国系"),("color","モノトーン"),("silhouette","リラックス"),("material","コットン"),("price_range","低")]),
-        (4,  "きれいめチェスターコート",    "オフィスブランドD",  12000, "https://via.placeholder.com/400?text=Item4",  "https://example.com/item/4",  [("style","きれいめ"),("color","モノトーン"),("silhouette","スリム"),("material","ニット"),("price_range","高")]),
-        (5,  "モードレザージャケット",      "セレクトショップE",  18000, "https://via.placeholder.com/400?text=Item5",  "https://example.com/item/5",  [("style","モード"),("color","モノトーン"),("silhouette","タイト"),("material","レザー"),("price_range","高")]),
-        (6,  "アースカラーカーゴパンツ",    "アウトドアブランドF", 7800, "https://via.placeholder.com/400?text=Item6",  "https://example.com/item/6",  [("style","カジュアル"),("color","アースカラー"),("silhouette","リラックス"),("material","コットン"),("price_range","中")]),
-        (7,  "ビビッドカラーニット",        "ポップブランドG",     4200, "https://via.placeholder.com/400?text=Item7",  "https://example.com/item/7",  [("style","ストリート"),("color","ビビッド"),("silhouette","オーバーサイズ"),("material","ニット"),("price_range","中")]),
-        (8,  "ペールトーンシアーブラウス",  "ガーリーブランドH",   5900, "https://via.placeholder.com/400?text=Item8",  "https://example.com/item/8",  [("style","きれいめ"),("color","ペールトーン"),("silhouette","リラックス"),("material","シアー"),("price_range","中")]),
-        (9,  "ストリートグラフィックT",    "ストリートブランドA", 2500, "https://via.placeholder.com/400?text=Item9",  "https://example.com/item/9",  [("style","ストリート"),("color","ビビッド"),("silhouette","オーバーサイズ"),("material","コットン"),("price_range","低")]),
-        (10, "ワークシャツ(カーキ)",        "ワークブランドI",     6500, "https://via.placeholder.com/400?text=Item10", "https://example.com/item/10", [("style","ワーク"),("color","アースカラー"),("silhouette","リラックス"),("material","コットン"),("price_range","中")]),
-        (11, "モノトーンスウェット",        "ミニマルブランドJ",   4800, "https://via.placeholder.com/400?text=Item11", "https://example.com/item/11", [("style","カジュアル"),("color","モノトーン"),("silhouette","オーバーサイズ"),("material","コットン"),("price_range","中")]),
-        (12, "韓国系ワイドパンツ",          "韓国ブランドC",       4500, "https://via.placeholder.com/400?text=Item12", "https://example.com/item/12", [("style","韓国系"),("color","モノトーン"),("silhouette","リラックス"),("material","コットン"),("price_range","中")]),
-        (13, "きれいめタートルニット",      "オフィスブランドD",   8800, "https://via.placeholder.com/400?text=Item13", "https://example.com/item/13", [("style","きれいめ"),("color","ペールトーン"),("silhouette","スリム"),("material","ニット"),("price_range","中")]),
-        (14, "アースカラーリネンシャツ",    "ナチュラルブランドK", 5200, "https://via.placeholder.com/400?text=Item14", "https://example.com/item/14", [("style","カジュアル"),("color","アースカラー"),("silhouette","リラックス"),("material","コットン"),("price_range","中")]),
-        (15, "モードシースルーブラウス",    "セレクトショップE",  11000, "https://via.placeholder.com/400?text=Item15", "https://example.com/item/15", [("style","モード"),("color","ペールトーン"),("silhouette","スリム"),("material","シアー"),("price_range","高")]),
-        (16, "デニムジャケット(ライト)",    "カジュアルブランドB", 9800, "https://via.placeholder.com/400?text=Item16", "https://example.com/item/16", [("style","カジュアル"),("color","アースカラー"),("silhouette","リラックス"),("material","デニム"),("price_range","中")]),
-        (17, "ビビッドカラーパーカー",      "ストリートブランドA", 5500, "https://via.placeholder.com/400?text=Item17", "https://example.com/item/17", [("style","ストリート"),("color","ビビッド"),("silhouette","オーバーサイズ"),("material","コットン"),("price_range","中")]),
-        (18, "韓国系クロップドジャケット",  "韓国ブランドC",       7200, "https://via.placeholder.com/400?text=Item18", "https://example.com/item/18", [("style","韓国系"),("color","モノトーン"),("silhouette","タイト"),("material","コットン"),("price_range","中")]),
-        (19, "ワークカーゴショーツ",        "ワークブランドI",     4900, "https://via.placeholder.com/400?text=Item19", "https://example.com/item/19", [("style","ワーク"),("color","アースカラー"),("silhouette","リラックス"),("material","コットン"),("price_range","中")]),
-        (20, "ペールピンクニットベスト",    "ガーリーブランドH",   3800, "https://via.placeholder.com/400?text=Item20", "https://example.com/item/20", [("style","きれいめ"),("color","ペールトーン"),("silhouette","スリム"),("material","ニット"),("price_range","低")]),
-        (21, "モードブラックスキニー",      "セレクトショップE",  13000, "https://via.placeholder.com/400?text=Item21", "https://example.com/item/21", [("style","モード"),("color","モノトーン"),("silhouette","タイト"),("material","デニム"),("price_range","高")]),
-        (22, "アースカラーニットカーディガン","ナチュラルブランドK",6800, "https://via.placeholder.com/400?text=Item22", "https://example.com/item/22", [("style","カジュアル"),("color","アースカラー"),("silhouette","リラックス"),("material","ニット"),("price_range","中")]),
-        (23, "韓国系ビッグシルエットシャツ","韓国ブランドC",       3500, "https://via.placeholder.com/400?text=Item23", "https://example.com/item/23", [("style","韓国系"),("color","アースカラー"),("silhouette","オーバーサイズ"),("material","コットン"),("price_range","低")]),
-        (24, "ストリートバギーデニム",      "ストリートブランドA", 8200, "https://via.placeholder.com/400?text=Item24", "https://example.com/item/24", [("style","ストリート"),("color","モノトーン"),("silhouette","リラックス"),("material","デニム"),("price_range","中")]),
-        (25, "きれいめワイドトラウザー",    "オフィスブランドD",   9500, "https://via.placeholder.com/400?text=Item25", "https://example.com/item/25", [("style","きれいめ"),("color","モノトーン"),("silhouette","リラックス"),("material","コットン"),("price_range","中")]),
-        (26, "ビビッドグリーンコート",      "ポップブランドG",    16000, "https://via.placeholder.com/400?text=Item26", "https://example.com/item/26", [("style","モード"),("color","ビビッド"),("silhouette","オーバーサイズ"),("material","ニット"),("price_range","高")]),
-        (27, "シアーロングスカート",        "ガーリーブランドH",   6200, "https://via.placeholder.com/400?text=Item27", "https://example.com/item/27", [("style","きれいめ"),("color","ペールトーン"),("silhouette","リラックス"),("material","シアー"),("price_range","中")]),
-        (28, "レザーバイカーパンツ",        "セレクトショップE",  22000, "https://via.placeholder.com/400?text=Item28", "https://example.com/item/28", [("style","モード"),("color","モノトーン"),("silhouette","タイト"),("material","レザー"),("price_range","高")]),
-        (29, "コットンワークオーバーオール","ワークブランドI",    11000, "https://via.placeholder.com/400?text=Item29", "https://example.com/item/29", [("style","ワーク"),("color","アースカラー"),("silhouette","リラックス"),("material","コットン"),("price_range","高")]),
-        (30, "ペールイエローニットT",       "ナチュラルブランドK", 2900, "https://via.placeholder.com/400?text=Item30", "https://example.com/item/30", [("style","カジュアル"),("color","ペールトーン"),("silhouette","リラックス"),("material","ニット"),("price_range","低")]),
-    ]
+    """テスト用ダミー商品30件を投入する（pytest conftest から呼ばれる）。"""
     with get_conn() as conn:
-        for item in items:
-            item_id, name, brand, price, image_url, external_url, tags = item
+        for item in _DUMMY_ITEMS:
             conn.execute(
-                "INSERT OR IGNORE INTO items VALUES (?,?,?,?,?,?)",
-                (item_id, name, brand, price, image_url, external_url),
+                """INSERT OR IGNORE INTO items
+                   (item_code, item_name, catchcopy, item_caption, item_price,
+                    shop_name, review_average, review_count, item_url, image_url, genre_id)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                (item["code"], item["name"], item["catch"], item["cap"],
+                 item["price"], item["shop"], 4.0, 10,
+                 item["url"], item["img"], item["genre"]),
             )
-            for cat, val in tags:
+            for cat, val in item["tags"]:
                 conn.execute(
                     "INSERT OR IGNORE INTO item_tags VALUES (?,?,?)",
-                    (item_id, cat, val),
+                    (item["code"], cat, val),
                 )

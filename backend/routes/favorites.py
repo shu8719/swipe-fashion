@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, g
 from backend.db import get_conn
 from backend.auth import login_required
+from backend.routes.items import _row_to_rakuten
 
 bp = Blueprint("favorites", __name__, url_prefix="/api/favorites")
 
@@ -12,10 +13,10 @@ def list_favorites():
         rows = conn.execute(
             """
             SELECT i.* FROM items i
-            JOIN user_actions ua ON ua.item_id = i.item_id
+            JOIN user_actions ua ON ua.item_code = i.item_code
             WHERE ua.user_id=? AND ua.action='LIKE'
             ORDER BY ua.created_at DESC
             """,
             (g.user_id,),
         ).fetchall()
-    return jsonify([dict(r) for r in rows])
+    return jsonify([_row_to_rakuten(r) for r in rows])

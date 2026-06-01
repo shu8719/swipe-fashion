@@ -1,15 +1,13 @@
 import os
-import tempfile
 import pytest
 
-# テスト用の一時DBを使う
+
 @pytest.fixture(autouse=True)
 def use_temp_db(monkeypatch, tmp_path):
     db_file = str(tmp_path / "test.sqlite3")
     monkeypatch.setenv("DB_PATH", db_file)
     monkeypatch.setenv("LLM_PROVIDER", "mock")
 
-    # config モジュールのキャッシュされた値を上書き
     import backend.config as cfg
     monkeypatch.setattr(cfg, "DB_PATH", db_file)
     monkeypatch.setattr(cfg, "LLM_PROVIDER", "mock")
@@ -35,13 +33,9 @@ def client(app):
 
 @pytest.fixture
 def auth_client(client):
-    """登録済みユーザーのトークンを持つクライアントを返す。"""
     resp = client.post("/api/auth/register", json={
-        "email": "test@example.com",
-        "password": "pass1234",
-        "age": 20,
-        "gender": "男性",
-        "region": "大阪",
+        "email": "test@example.com", "password": "pass1234",
+        "age": 20, "gender": "男性", "region": "大阪",
     })
     token = resp.get_json()["token"]
 
@@ -49,7 +43,6 @@ def auth_client(client):
         def get(self, url, **kw):
             kw.setdefault("headers", {})["Authorization"] = f"Bearer {token}"
             return client.get(url, **kw)
-
         def post(self, url, **kw):
             kw.setdefault("headers", {})["Authorization"] = f"Bearer {token}"
             return client.post(url, **kw)
