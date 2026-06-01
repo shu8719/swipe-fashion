@@ -3,6 +3,7 @@ import SwiftUI
 struct HistoryView: View {
     @EnvironmentObject private var viewModel: SwipeViewModel
     @State private var selectedItem: Item?
+    @State private var showClearAllConfirmation = false
 
     private let columns = [GridItem(.flexible()), GridItem(.flexible())]
 
@@ -17,6 +18,13 @@ struct HistoryView: View {
                             ForEach(viewModel.likedItems.reversed()) { item in
                                 ItemGridCell(item: item)
                                     .onTapGesture { selectedItem = item }
+                                    .contextMenu {
+                                        Button(role: .destructive) {
+                                            viewModel.unlike(item: item)
+                                        } label: {
+                                            Label("削除", systemImage: "trash")
+                                        }
+                                    }
                             }
                         }
                         .padding()
@@ -24,6 +32,29 @@ struct HistoryView: View {
                 }
             }
             .navigationTitle("Like済み (\(viewModel.likedItems.count)件)")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    if !viewModel.likedItems.isEmpty {
+                        Button(role: .destructive) {
+                            showClearAllConfirmation = true
+                        } label: {
+                            Text("すべて削除")
+                        }
+                    }
+                }
+            }
+            .confirmationDialog(
+                "LIKE履歴をすべて削除しますか？",
+                isPresented: $showClearAllConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("削除", role: .destructive) {
+                    viewModel.clearAllLikes()
+                }
+                Button("キャンセル", role: .cancel) {}
+            } message: {
+                Text("この操作は取り消せません。")
+            }
             .fullScreenCover(item: $selectedItem) { item in
                 if let url = item.productUrl {
                     SafariView(url: url).ignoresSafeArea()
