@@ -76,6 +76,7 @@ struct SwipeView: View {
             if hasActiveFilter {
                 VStack(spacing: 4) {
                     Text("現在の表示カテゴリ：\(viewModel.profile.category.displayName)")
+                    Text("現在のアイテム種別：\(viewModel.profile.itemType.displayName)")
                     Text("現在の価格帯：\(viewModel.profile.priceRange.displayName)")
                 }
                 .font(.subheadline)
@@ -100,7 +101,9 @@ struct SwipeView: View {
     }
 
     private var hasActiveFilter: Bool {
-        viewModel.profile.category != .all || viewModel.profile.priceRange != .all
+        viewModel.profile.category != .all ||
+        viewModel.profile.priceRange != .all ||
+        viewModel.profile.itemType != .all
     }
 
     // MARK: - Swipe Logic

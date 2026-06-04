@@ -22,6 +22,16 @@ struct SettingsView: View {
                     .pickerStyle(.segmented)
                 }
 
+                Section("アイテム種別") {
+                    Picker("アイテム種別", selection: $draft.itemType) {
+                        ForEach(UserProfile.ItemType.allCases) { type in
+                            Text(type.displayName).tag(type)
+                        }
+                    }
+                    .pickerStyle(.inline)
+                    .labelsHidden()
+                }
+
                 Section("価格帯") {
                     Picker("価格帯", selection: $draft.priceRange) {
                         ForEach(UserProfile.PriceRange.allCases) { range in

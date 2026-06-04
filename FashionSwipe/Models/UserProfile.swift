@@ -4,6 +4,7 @@ struct UserProfile: Codable, Equatable {
     var displayName: String
     var category: Category
     var priceRange: PriceRange
+    var itemType: ItemType
     var favoriteStyles: [String]
 
     enum Category: String, Codable, CaseIterable, Identifiable {
@@ -49,6 +50,27 @@ struct UserProfile: Codable, Equatable {
         }
     }
 
+    /// アイテム種別フィルタ。判定はファイル名キーワードで行う（MockDataService）。
+    enum ItemType: String, Codable, CaseIterable, Identifiable {
+        case all
+        case tops
+        case bottoms
+        case shoes
+        case onepiece
+
+        var id: String { rawValue }
+
+        var displayName: String {
+            switch self {
+            case .all:      return "すべて"
+            case .tops:     return "トップス"
+            case .bottoms:  return "ボトムス"
+            case .shoes:    return "シューズ"
+            case .onepiece: return "ワンピース"
+            }
+        }
+    }
+
     static let availableStyles: [String] = [
         "カジュアル",
         "きれいめ",
@@ -62,6 +84,26 @@ struct UserProfile: Codable, Equatable {
         displayName: "",
         category: .all,
         priceRange: .all,
+        itemType: .all,
         favoriteStyles: []
     )
+}
+
+// MARK: - 後方互換デコード
+// 既存の保存済みプロフィール（itemType フィールドが無い旧データ）も
+// デコードできるよう、itemType は欠落時 .all として扱う。
+// init(from:) を extension に置くことでメンバーワイズ初期化子は維持される。
+extension UserProfile {
+    enum CodingKeys: String, CodingKey {
+        case displayName, category, priceRange, itemType, favoriteStyles
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        displayName    = try c.decode(String.self, forKey: .displayName)
+        category       = try c.decode(Category.self, forKey: .category)
+        priceRange     = try c.decode(PriceRange.self, forKey: .priceRange)
+        itemType       = try c.decodeIfPresent(ItemType.self, forKey: .itemType) ?? .all
+        favoriteStyles = try c.decode([String].self, forKey: .favoriteStyles)
+    }
 }

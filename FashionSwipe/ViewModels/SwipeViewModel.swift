@@ -62,14 +62,15 @@ final class SwipeViewModel: ObservableObject {
 
     func updateProfile(_ newProfile: UserProfile) {
         let changed = newProfile.category   != profile.category ||
-                      newProfile.priceRange != profile.priceRange
+                      newProfile.priceRange != profile.priceRange ||
+                      newProfile.itemType   != profile.itemType
         profile = newProfile
         saveProfile()
         if changed { resetCards(); refreshRecommendations() }
     }
 
     func resetFilters() {
-        var p = profile; p.category = .all; p.priceRange = .all
+        var p = profile; p.category = .all; p.priceRange = .all; p.itemType = .all
         updateProfile(p)
     }
 
@@ -86,7 +87,7 @@ final class SwipeViewModel: ObservableObject {
             let likedGenres = Set(likedItems.map { $0.genreId })
             let avgPrice    = max(likedItems.reduce(0) { $0 + $1.itemPrice } / likedItems.count, 1)
 
-            let scored: [(Item, Double)] = MockDataService.loadItems(for: .all)
+            let scored: [(Item, Double)] = MockDataService.loadItems(for: .all, type: profile.itemType)
                 .filter { !likedIds.contains($0.id) }
                 .map { item in
                     let genreScore = likedGenres.contains(item.genreId) ? 100.0 : 0.0
@@ -95,7 +96,7 @@ final class SwipeViewModel: ObservableObject {
                 }
             return scored.sorted { $0.1 > $1.1 }.prefix(20).map { $0.0 }
         } else {
-            return MockDataService.loadItems(for: profile.category)
+            return MockDataService.loadItems(for: profile.category, type: profile.itemType)
                 .filter { profile.priceRange.matches(price: $0.itemPrice) }
                 .filter { !likedIds.contains($0.id) }
                 .shuffled()
@@ -109,7 +110,7 @@ final class SwipeViewModel: ObservableObject {
     private func resetCards() { cards = loadFilteredCards() }
 
     private func loadFilteredCards() -> [Item] {
-        MockDataService.loadItems(for: profile.category)
+        MockDataService.loadItems(for: profile.category, type: profile.itemType)
             .filter { profile.priceRange.matches(price: $0.itemPrice) }
             .filter { item in !likedItems.contains(where: { $0.id == item.id }) }
     }
