@@ -27,21 +27,23 @@ struct SwipeView: View {
             if viewModel.cards.isEmpty {
                 emptyState
             } else {
-                ForEach(viewModel.displayCards.dropFirst().reversed()) { item in
-                    CardView(item: item, offset: .zero, likeOpacity: 0, nopeOpacity: 0)
-                        .scaleEffect(scale(for: item))
-                        .offset(y: yOffset(for: item))
-                }
-                if let top = viewModel.displayCards.first {
+                // 3枚を1つのForEachで描画。カードIDを安定IDにすることで、
+                // スワイプでindexが変わった際に scaleEffect / offset がアニメーションし、
+                // 背面カード(0.97倍)→最前面(1.0倍)が瞬間ジャンプせず滑らかに拡大する。
+                ForEach(Array(viewModel.displayCards.enumerated()).reversed(), id: \.element.id) { index, item in
+                    let isTop = index == 0
                     CardView(
-                        item: top,
-                        offset: offset,
-                        likeOpacity: likeOpacity,
-                        nopeOpacity: nopeOpacity
+                        item: item,
+                        offset: isTop ? offset : .zero,
+                        likeOpacity: isTop ? likeOpacity : 0,
+                        nopeOpacity: isTop ? nopeOpacity : 0
                     )
-                    .id(top.id)
-                    .gesture(dragGesture)
+                    .scaleEffect(1.0 - CGFloat(index) * 0.03)
+                    .offset(y: CGFloat(index) * 10)
+                    .zIndex(Double(viewModel.displayCards.count - index))
+                    .gesture(dragGesture, including: isTop ? .all : .subviews)
                     .animation(.interactiveSpring(response: 0.3, dampingFraction: 0.7), value: offset)
+                    .animation(.spring(response: 0.35, dampingFraction: 0.8), value: index)
                 }
             }
         }
@@ -152,16 +154,6 @@ struct SwipeView: View {
     }
 
     // MARK: - Helpers
-
-    private func scale(for item: Item) -> CGFloat {
-        let index = viewModel.displayCards.firstIndex(where: { $0.id == item.id }) ?? 0
-        return 1.0 - CGFloat(index) * 0.03
-    }
-
-    private func yOffset(for item: Item) -> CGFloat {
-        let index = viewModel.displayCards.firstIndex(where: { $0.id == item.id }) ?? 0
-        return CGFloat(index) * 10
-    }
 
     enum SwipeDirection { case like, dislike }
 }
