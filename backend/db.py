@@ -1,5 +1,7 @@
 import sqlite3
 from pathlib import Path
+import json
+import os
 from backend import config
 
 _SCHEMA = Path(__file__).parent / "schema.sql"
@@ -43,12 +45,20 @@ _DUMMY_ITEMS = [
 ]
 
 
-def get_conn() -> sqlite3.Connection:
+from contextlib import contextmanager
+
+@contextmanager
+def get_conn():
+    """sqlite3接続を返すコンテキストマネージャ（退出時に自動コミット＋クローズ）。"""
     conn = sqlite3.connect(config.DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
-    return conn
+    try:
+        yield conn
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def init_db():
@@ -75,3 +85,70 @@ def seed_dummy_items():
                     "INSERT OR IGNORE INTO item_tags VALUES (?,?,?)",
                     (item["code"], cat, val),
                 )
+
+
+def load_rakuten_json_dir(json_dir: str) -> int:
+    """楽天API形式のJSONディレクトリから商品をDBに投入する。
+    
+    Args:
+        json_dir: JSONファイルが格納されたディレクトリパス
+    
+    Returns:
+        投入件数
+    """
+    json_path = Path(json_dir)
+    if not json_path.exists():
+        print(f"ディレクトリが見つかりません: {json_dir}")
+        return 0
+    
+    json_files = sorted(json_path.glob("*.json"))
+    if not json_files:
+        print(f"JSONファイルが見つかりません: {json_dir}")
+        return 0
+    
+    count = 0
+    with get_conn() as conn:
+        for jf in json_files:
+            try:
+                with open(jf, encoding="utf-8") as f:
+                    data = json.load(f)
+            except Exception as e:
+                print(f"読み込みエラー {jf.name}: {e}")
+                continue
+            
+            items = data.get("Items", [])
+            for wrapper in items:
+                item = wrapper.get("Item", {})
+                item_code = item.get("itemCode", "")
+                if not item_code:
+                    continue
+                
+                # mediumImageUrls から最初の画像URLを取得
+                image_url = ""
+                medium_urls = item.get("mediumImageUrls", [])
+                if medium_urls and isinstance(medium_urls[0], dict):
+                    image_url = medium_urls[0].get("imageUrl", "")
+                
+                conn.execute(
+                    """INSERT OR IGNORE INTO items
+                       (item_code, item_name, catchcopy, item_caption, item_price,
+                        shop_name, review_average, review_count, item_url, image_url, genre_id)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                    (
+                        item_code,
+                        item.get("itemName", ""),
+                        item.get("catchcopy", ""),
+                        item.get("itemCaption", ""),
+                        item.get("itemPrice", 0),
+                        item.get("shopName", ""),
+                        item.get("reviewAverage", 0.0),
+                        item.get("reviewCount", 0),
+                        item.get("itemUrl", ""),
+                        image_url,
+                        item.get("genreId", 0),
+                    ),
+                )
+                count += 1
+    
+    print(f"楽天JSON投入完了: {count}件 ({len(json_files)}ファイル)")
+    return count
