@@ -43,7 +43,7 @@ struct CardView: View {
                     Color.gray.opacity(0.1)
                 }
             }
-            .frame(height: 400)
+            .frame(height: 300)
             .clipped()
 
             itemInfo
