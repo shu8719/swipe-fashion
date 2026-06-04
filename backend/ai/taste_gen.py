@@ -7,13 +7,14 @@ from backend.db import get_conn
 
 _PROMPT_TEMPLATE = """\
 あなたはファッションスタイリストAIです。以下のユーザー情報をもとに、
-そのユーザーのファッション嗜好を自然で親しみやすい日本語で100〜150字で説明してください。
+そのユーザーのファッション嗜好を自然で親しみやすい日本語で80〜120字で説明してください。
 
 【好きなスタイルタグ TOP3】：{top_tags}
+【よくLIKEするショップ】：{top_shops}
 【最近LIKEした商品】：{liked_items_summary}
 【ユーザー属性】：{age}代 {gender} {region}在住
 
-※出力は説明文のみ。箇条書き不可。\
+※出力は説明文のみ。箇条書き不可。ショップ名やアイテムの傾向を1〜2個具体的に入れること。\
 """
 
 _LIKE_THRESHOLD = 10
@@ -27,7 +28,7 @@ def _get_user_context(user_id: int) -> dict:
 
         likes = conn.execute(
             """
-            SELECT i.item_name, it.tag_category, it.tag_value
+            SELECT i.item_name, i.shop_name, it.tag_category, it.tag_value
             FROM user_actions ua
             JOIN items i ON i.item_code = ua.item_code
             JOIN item_tags it ON it.item_code = ua.item_code
@@ -43,19 +44,25 @@ def _get_user_context(user_id: int) -> dict:
         ).fetchone()["cnt"]
 
     tag_freq: dict[str, int] = {}
+    shop_freq: dict[str, int] = {}
     liked_names: list[str] = []
     for row in likes:
         key = f"{row['tag_category']}:{row['tag_value']}"
         tag_freq[key] = tag_freq.get(key, 0) + 1
         if row["tag_category"] == "style" and row["tag_value"] not in liked_names:
             liked_names.append(row["tag_value"])
+        shop = row["shop_name"] or ""
+        if shop:
+            shop_freq[shop] = shop_freq.get(shop, 0) + 1
 
-    top_tags = sorted(tag_freq, key=lambda k: tag_freq[k], reverse=True)[:3]
+    top_tags  = sorted(tag_freq,  key=lambda k: tag_freq[k],  reverse=True)[:3]
+    top_shops = sorted(shop_freq, key=lambda k: shop_freq[k], reverse=True)[:3]
 
     return {
-        "top_tags": "、".join(top_tags) or "まだデータなし",
+        "top_tags":           "、".join(top_tags) or "まだデータなし",
+        "top_shops":          "、".join(top_shops) or "なし",
         "liked_items_summary": "、".join(liked_names[:5]) or "なし",
-        "age": str(user["age"] // 10 * 10) if user and user["age"] else "不明",
+        "age":    str(user["age"] // 10 * 10) if user and user["age"] else "不明",
         "gender": (user["gender"] or "不明") if user else "不明",
         "region": (user["region"] or "不明") if user else "不明",
         "like_count": like_count,
@@ -79,7 +86,7 @@ def _call_gemini(prompt: str) -> str:
     import urllib.request
     url = (
         f"https://generativelanguage.googleapis.com/v1beta/models/"
-        f"gemini-1.5-flash:generateContent?key={config.GOOGLE_API_KEY}"
+        f"{config.GEMINI_MODEL}:generateContent?key={config.GOOGLE_API_KEY}"
     )
     body = json.dumps({"contents": [{"parts": [{"text": prompt}]}]}).encode()
     req  = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
