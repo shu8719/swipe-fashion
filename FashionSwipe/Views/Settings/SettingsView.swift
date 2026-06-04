@@ -1,32 +1,63 @@
 import SwiftUI
 
 struct SettingsView: View {
-    @EnvironmentObject private var authStore: AuthStore
+    @EnvironmentObject private var viewModel: SwipeViewModel
+    @State private var draft: UserProfile = .default
 
     var body: some View {
         NavigationStack {
-            List {
-                Section {
-                    HStack {
-                        Label("ユーザーID", systemImage: "person.circle")
-                        Spacer()
-                        Text(authStore.userId.map { "#\($0)" } ?? "—")
-                            .foregroundColor(.secondary)
-                            .font(.subheadline)
-                    }
-                } header: {
-                    Text("アカウント")
+            Form {
+                Section("プロフィール") {
+                    TextField("表示名", text: $draft.displayName)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled(true)
                 }
 
-                Section {
-                    Button(role: .destructive) {
-                        authStore.logout()
-                    } label: {
-                        Label("ログアウト", systemImage: "rectangle.portrait.and.arrow.right")
+                Section("表示カテゴリ") {
+                    Picker("カテゴリ", selection: $draft.category) {
+                        ForEach(UserProfile.Category.allCases) { category in
+                            Text(category.displayName).tag(category)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                Section("価格帯") {
+                    Picker("価格帯", selection: $draft.priceRange) {
+                        ForEach(UserProfile.PriceRange.allCases) { range in
+                            Text(range.displayName).tag(range)
+                        }
+                    }
+                    .pickerStyle(.inline)
+                    .labelsHidden()
+                }
+
+                Section("好きなスタイル") {
+                    ForEach(UserProfile.availableStyles, id: \.self) { style in
+                        Toggle(style, isOn: bindingForStyle(style))
                     }
                 }
             }
             .navigationTitle("設定")
+            .onAppear { draft = viewModel.profile }
+            .onChange(of: draft) { _, newValue in
+                viewModel.updateProfile(newValue)
+            }
         }
+    }
+
+    private func bindingForStyle(_ style: String) -> Binding<Bool> {
+        Binding(
+            get: { draft.favoriteStyles.contains(style) },
+            set: { isOn in
+                if isOn {
+                    if !draft.favoriteStyles.contains(style) {
+                        draft.favoriteStyles.append(style)
+                    }
+                } else {
+                    draft.favoriteStyles.removeAll { $0 == style }
+                }
+            }
+        )
     }
 }

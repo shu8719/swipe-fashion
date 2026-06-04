@@ -1,8 +1,6 @@
 import SwiftUI
 
 struct ContentView: View {
-    @EnvironmentObject private var authStore: AuthStore
-
     var body: some View {
         TabView {
             SwipeView()

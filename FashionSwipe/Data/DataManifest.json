@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "categories": {
+    "mens": [
+      "sample_mens",
+      "sample_oxford_shoes",
+      "sample_derby_shoes",
+      "sample_monk_strap",
+      "sample_double_monk_strap",
+      "sample_wing_tip",
+      "sample_chukka_boots",
+      "sample_loafer",
+      "sample_penny_loafer",
+      "sample_chelsea_boots",
+      "sample_engineer_boots",
+      "sample_dress_shoes",
+      "sample_business_shoes"
+    ],
+    "ladies": [
+      "sample_ladies",
+      "sample_onepiece",
+      "sample_pumps",
+      "sample_blouse",
+      "sample_camisole",
+      "sample_ballet_pumps",
+      "sample_high_heel_pumps",
+      "sample_stiletto_heel_pumps",
+      "sample_mule",
+      "sample_espadrille",
+      "sample_all_in_one",
+      "sample_jump_suit",
+      "sample_rompers",
+      "sample_salopette"
+    ],
+    "unisex": [
+      "sample_sneakers",
+      "sample_tshirt",
+      "sample_hoodie",
+      "sample_jeans",
+      "sample_shirt",
+      "sample_cardigan",
+      "sample_knit",
+      "sample_sweater",
+      "sample_sweat",
+      "sample_parka",
+      "sample_cargo_pants",
+      "sample_chinos",
+      "sample_skinny_jeans",
+      "sample_polo_shirt"
+    ]
+  }
+}
