@@ -83,7 +83,7 @@ struct ItemGridCell: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            AsyncImage(url: item.largeImageUrl) { phase in
+            CachedAsyncImage(url: item.largeImageUrl) { phase in
                 switch phase {
                 case .success(let image):
                     image.resizable().aspectRatio(contentMode: .fill)

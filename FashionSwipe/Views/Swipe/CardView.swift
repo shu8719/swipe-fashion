@@ -32,7 +32,7 @@ struct CardView: View {
 
     private var cardContent: some View {
         VStack(spacing: 0) {
-            AsyncImage(url: item.largeImageUrl) { phase in
+            CachedAsyncImage(url: item.largeImageUrl) { phase in
                 switch phase {
                 case .success(let image):
                     image.resizable().aspectRatio(contentMode: .fill)
