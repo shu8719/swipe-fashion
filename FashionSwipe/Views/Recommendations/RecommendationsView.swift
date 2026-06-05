@@ -38,7 +38,7 @@ struct RecommendationsView: View {
                 }
             }
             .navigationTitle("おすすめ")
-            .task { await loadTaste() }
+            .task(id: viewModel.likedItems.count) { await loadTaste() }
             .fullScreenCover(item: $selectedItem) { item in
                 if let url = item.productUrl {
                     SafariView(url: url).ignoresSafeArea()
@@ -106,6 +106,20 @@ struct RecommendationsView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color(.systemGray6))
             .clipShape(RoundedRectangle(cornerRadius: 12))
+        } else if likeCount >= 10 {
+            // サーバー側のLIKE登録やAI生成がまだ追いついていない場合
+            HStack(spacing: 8) {
+                Image(systemName: "sparkles")
+                    .foregroundColor(.purple.opacity(0.7))
+                    .font(.caption)
+                Text("AIスタイル診断を準備中です。少し待つと表示されます")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(.systemGray6))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
         }
         // likeCount == 0 の場合はカード非表示
     }
@@ -113,17 +127,33 @@ struct RecommendationsView: View {
     // MARK: - Helpers
 
     private func loadTaste() async {
-        guard viewModel.likedItems.count >= 10 else { return }
+        guard viewModel.likedItems.count >= 10 else {
+            tasteText = nil
+            return
+        }
         isTasteLoading = true
         defer { isTasteLoading = false }
-        do {
-            let resp = try await RecommendService.fetchTaste()
-            if let desc = resp.description, !desc.isEmpty {
-                tasteText = desc
+
+        await ActionService.syncLikes(itemCodes: viewModel.likedItems.map(\.itemCode))
+        if Task.isCancelled { return }
+
+        for attempt in 0..<3 {
+            do {
+                let resp = try await RecommendService.fetchTaste()
+                if let desc = resp.description, !desc.isEmpty {
+                    tasteText = desc
+                    return
+                }
+            } catch {
+                // バックエンド未起動などはサイレントに無視（ローカル動作継続）
+                print("[Taste] fetch skipped: \(error.localizedDescription)")
+                return
             }
-        } catch {
-            // バックエンド未起動などはサイレントに無視（ローカル動作継続）
-            print("[Taste] fetch skipped: \(error.localizedDescription)")
+
+            if attempt < 2 {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                if Task.isCancelled { return }
+            }
         }
     }
 

@@ -18,4 +18,11 @@ enum ActionService {
             "/api/actions", body: ActionBody(item_code: itemCode, action: "SKIP")
         )
     }
+
+    static func syncLikes(itemCodes: [String]) async {
+        var synced = Set<String>()
+        for code in itemCodes where synced.insert(code).inserted {
+            try? await sendLike(itemCode: code)
+        }
+    }
 }

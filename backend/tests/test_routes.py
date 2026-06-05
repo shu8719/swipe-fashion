@@ -73,6 +73,19 @@ class TestActions:
         resp = auth_client.post("/api/actions", json={"item_code":"dummy:item0002","action":"SKIP"})
         assert resp.status_code == 200
 
+    def test_duplicate_like_is_idempotent(self, auth_client):
+        auth_client.post("/api/actions", json={"item_code":"dummy:item0001","action":"LIKE"})
+        resp = auth_client.post("/api/actions", json={"item_code":"dummy:item0001","action":"LIKE"})
+
+        from backend.db import get_conn
+        with get_conn() as conn:
+            count = conn.execute(
+                "SELECT COUNT(*) AS cnt FROM user_actions WHERE action='LIKE'"
+            ).fetchone()["cnt"]
+
+        assert resp.get_json()["already_recorded"] is True
+        assert count == 1
+
     def test_invalid_action(self, auth_client):
         assert auth_client.post("/api/actions", json={"item_code":"dummy:item0001","action":"MAYBE"}).status_code == 400
 
@@ -112,3 +125,16 @@ class TestTaste:
             auth_client.post("/api/actions", json={"item_code": f"dummy:item{i:04d}", "action":"LIKE"})
         d = auth_client.get("/api/taste").get_json()
         assert d["description"] is not None
+
+    def test_taste_generated_on_tenth_like(self, auth_client):
+        for i in range(1, 11):
+            auth_client.post("/api/actions", json={"item_code": f"dummy:item{i:04d}", "action":"LIKE"})
+
+        from backend.db import get_conn
+        with get_conn() as conn:
+            row = conn.execute(
+                "SELECT description, like_count_at_gen FROM taste_descriptions"
+            ).fetchone()
+
+        assert row["description"] is not None
+        assert row["like_count_at_gen"] == 10
