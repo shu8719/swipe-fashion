@@ -40,7 +40,7 @@ final class APIClient {
         #if targetEnvironment(simulator)
         return "http://127.0.0.1:5001"
         #else
-        return "http://172.20.10.12:5001"
+        return "http://192.168.1.41:5001"
         #endif
     }
 
