@@ -131,29 +131,24 @@ struct RecommendationsView: View {
             tasteText = nil
             return
         }
+
+        // syncLikes はバックグラウンドで走らせてUIをブロックしない
+        let codes = viewModel.likedItems.map(\.itemCode)
+        Task { await ActionService.syncLikes(itemCodes: codes) }
+
+        // taste取得は1回だけ試みる（失敗してもクルクルを出さない）
         isTasteLoading = true
         defer { isTasteLoading = false }
 
-        await ActionService.syncLikes(itemCodes: viewModel.likedItems.map(\.itemCode))
-        if Task.isCancelled { return }
+        guard !Task.isCancelled else { return }
 
-        for attempt in 0..<3 {
-            do {
-                let resp = try await RecommendService.fetchTaste()
-                if let desc = resp.description, !desc.isEmpty {
-                    tasteText = desc
-                    return
-                }
-            } catch {
-                // バックエンド未起動などはサイレントに無視（ローカル動作継続）
-                print("[Taste] fetch skipped: \(error.localizedDescription)")
-                return
+        do {
+            let resp = try await RecommendService.fetchTaste()
+            if let desc = resp.description, !desc.isEmpty {
+                tasteText = desc
             }
-
-            if attempt < 2 {
-                try? await Task.sleep(nanoseconds: 1_000_000_000)
-                if Task.isCancelled { return }
-            }
+        } catch {
+            print("[Taste] fetch skipped: \(error.localizedDescription)")
         }
     }
 
