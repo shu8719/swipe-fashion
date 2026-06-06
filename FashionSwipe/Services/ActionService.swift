@@ -20,9 +20,11 @@ enum ActionService {
     }
 
     static func syncLikes(itemCodes: [String]) async {
-        var synced = Set<String>()
-        for code in itemCodes where synced.insert(code).inserted {
-            try? await sendLike(itemCode: code)
+        let unique = Array(Set(itemCodes))
+        await withTaskGroup(of: Void.self) { group in
+            for code in unique {
+                group.addTask { try? await sendLike(itemCode: code) }
+            }
         }
     }
 }

@@ -58,6 +58,7 @@ final class APIClient {
     private func makeRequest(method: String, path: String) throws -> URLRequest {
         guard let url = URL(string: baseURL + path) else { throw APIError.invalidURL }
         var req = URLRequest(url: url)
+        req.timeoutInterval = 5
         req.httpMethod = method
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let token { req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
