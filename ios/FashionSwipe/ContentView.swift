@@ -29,7 +29,7 @@ struct ContentView: View {
         case .swipe:     SwipeView()
         case .recommend: RecommendationsView()
         case .likes:     LikesView()
-        case .myPage:    SettingsView()
+        case .myPage:    MyPageView()
         }
     }
 }

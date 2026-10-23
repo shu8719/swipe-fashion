@@ -25,7 +25,11 @@ struct FashionSwipeApp: App {
     }
 
     private func loginIfNeeded() async {
-        guard !authStore.isLoggedIn else { return }
+        guard !authStore.isLoggedIn else {
+            // ログイン済みだと起動時に通信が起きないので、接続状態だけ軽く確かめる
+            await ConnectionStatus.shared.retry()
+            return
+        }
         do {
             let res = try await AuthService.loginWithDevice()
             authStore.save(token: res.token, userId: res.user_id)

@@ -5,6 +5,8 @@ struct UserProfile: Codable, Equatable {
     var category: Category
     var priceRange: PriceRange
     var itemType: ItemType
+    /// 以前の「好きなスタイル」。推薦にも API にも使っていないため画面からは外したが、
+    /// 保存済みのプロフィールを読めるよう項目は残している
     var favoriteStyles: [String]
 
     enum Category: String, Codable, CaseIterable, Identifiable {
@@ -70,15 +72,6 @@ struct UserProfile: Codable, Equatable {
             }
         }
     }
-
-    static let availableStyles: [String] = [
-        "カジュアル",
-        "きれいめ",
-        "ストリート",
-        "フェミニン",
-        "ナチュラル",
-        "モード"
-    ]
 
     static let `default` = UserProfile(
         displayName: "",
