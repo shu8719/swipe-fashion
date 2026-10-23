@@ -5,6 +5,7 @@ struct FashionSwipeApp: App {
     @StateObject private var viewModel  = SwipeViewModel()
     @StateObject private var authStore  = AuthStore()
     @StateObject private var navigation = AppNavigation()
+    @StateObject private var taste      = TasteStore()
 
     var body: some Scene {
         WindowGroup {
@@ -12,6 +13,8 @@ struct FashionSwipeApp: App {
                 .environmentObject(viewModel)
                 .environmentObject(authStore)
                 .environmentObject(navigation)
+                .environmentObject(taste)
+                .environmentObject(ConnectionStatus.shared)
                 .onAppear {
                     #if DEBUG
                     ScreenshotScenario.apply(viewModel: viewModel, navigation: navigation)

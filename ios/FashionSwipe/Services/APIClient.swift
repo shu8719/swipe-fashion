@@ -65,11 +65,21 @@ final class APIClient {
         return req
     }
 
+    /// サーバーが生きているかを軽く確かめる（接続状態の「再試行」用。既存の GET /health）
+    func checkHealth() async throws {
+        struct Health: Decodable { let status: String }
+        let _: Health = try await get("/health")
+    }
+
     private func execute<T: Decodable>(_ req: URLRequest, allowAuthRetry: Bool = true) async throws -> T {
         let data: Data
         let response: URLResponse
         do { (data, response) = try await session.data(for: req) }
-        catch { throw APIError.networkError(error) }
+        catch {
+            await Self.reportConnection(error: error)
+            throw APIError.networkError(error)
+        }
+        await Self.reportConnection(error: nil)
 
         if let http = response as? HTTPURLResponse {
             if http.statusCode == 401 {
@@ -105,7 +115,11 @@ final class APIClient {
         let data: Data
         let response: URLResponse
         do { (data, response) = try await session.data(for: req) }
-        catch { throw APIError.networkError(error) }
+        catch {
+            await Self.reportConnection(error: error)
+            throw APIError.networkError(error)
+        }
+        await Self.reportConnection(error: nil)
 
         guard let http = response as? HTTPURLResponse,
               (200..<300).contains(http.statusCode) else {
@@ -116,5 +130,19 @@ final class APIClient {
         UserDefaults.standard.set(auth.token, forKey: tokenKey)
         UserDefaults.standard.set(auth.user_id, forKey: userIdKey)
         return true
+    }
+
+    /// 通信の成否を共有の接続状態に反映する。
+    /// サーバーから何か応答があれば「接続中」。タスクの取り消しは未接続に数えない
+    private static func reportConnection(error: Error?) async {
+        if let urlError = error as? URLError, urlError.code == .cancelled { return }
+        if error is CancellationError { return }
+        await MainActor.run {
+            if error == nil {
+                ConnectionStatus.shared.recordSuccess()
+            } else {
+                ConnectionStatus.shared.recordFailure()
+            }
+        }
     }
 }

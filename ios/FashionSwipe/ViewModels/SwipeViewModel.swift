@@ -128,18 +128,36 @@ final class SwipeViewModel: ObservableObject {
 
     // MARK: - Recommendations
 
+    /// LIKE がこの件数に達すると、おすすめがあなた向け（ジャンル一致＋価格が近い順）に切り替わる
+    static let personalizeThreshold = 3
+    var isPersonalized: Bool { likedItems.count >= Self.personalizeThreshold }
+
+    /// おすすめ画面の種別チップ（この画面だけで効く。スワイプの絞り込みとは別）
+    @Published var recommendationType: UserProfile.ItemType = .all {
+        didSet { if oldValue != recommendationType { refreshRecommendations() } }
+    }
+
     func refreshRecommendations() {
         recommendedItems = computeRecommendations()
     }
 
+    /// 一覧のカードに出すおすすめ理由。計算と同じ基準で、ジャンルが一致したものは「同じジャンル」、
+    /// それ以外は価格の近さで選ばれているので「近い価格帯」
+    func recommendationReason(for item: Item) -> String? {
+        guard isPersonalized else { return nil }
+        return likedGenreIds.contains(item.genreId) ? "同じジャンル" : "近い価格帯"
+    }
+
+    private var likedGenreIds: Set<Int> { Set(likedItems.map(\.genreId)) }
+
     private func computeRecommendations() -> [Item] {
         let likedIds = Set(likedItems.map { $0.id })
 
-        if likedItems.count >= 3 {
-            let likedGenres = Set(likedItems.map { $0.genreId })
+        if isPersonalized {
+            let likedGenres = likedGenreIds
             let avgPrice    = max(likedItems.reduce(0) { $0 + $1.itemPrice } / likedItems.count, 1)
 
-            let scored: [(Item, Double)] = MockDataService.loadItems(for: .all, type: profile.itemType)
+            let scored: [(Item, Double)] = MockDataService.loadItems(for: .all, type: recommendationType)
                 .filter { !likedIds.contains($0.id) }
                 .map { item in
                     let genreScore = likedGenres.contains(item.genreId) ? 100.0 : 0.0
@@ -148,13 +166,34 @@ final class SwipeViewModel: ObservableObject {
                 }
             return scored.sorted { $0.1 > $1.1 }.prefix(20).map { $0.0 }
         } else {
+            // LIKE が少ないうちは「いま人気のアイテム」としてレビューの多い順に並べる
             return MockDataService.loadItems(for: profile.category, type: profile.itemType)
                 .filter { profile.priceRange.matches(price: $0.itemPrice) }
                 .filter { !likedIds.contains($0.id) }
-                .shuffled()
+                .sorted { ($0.reviewCount, $0.reviewAverage) > ($1.reviewCount, $1.reviewAverage) }
                 .prefix(20)
                 .map { $0 }
         }
+    }
+
+    /// 一覧のハートから LIKE を付け外しする。押した直後に一覧が並び替わらないよう、
+    /// おすすめの再計算は画面を開き直したときに行う
+    func setLiked(_ item: Item, _ liked: Bool) {
+        let isLiked = likedItems.contains(where: { $0.id == item.id })
+        guard liked != isLiked else { return }
+        if liked {
+            likedItems.append(item)
+            let code = item.itemCode
+            Task { try? await ActionService.sendLike(itemCode: code) }
+        } else {
+            // TODO: サーバーに LIKE を外す API ができたら、サーバー側からも外す
+            likedItems.removeAll { $0.id == item.id }
+        }
+        saveLikedItems()
+    }
+
+    func isLiked(_ item: Item) -> Bool {
+        likedItems.contains(where: { $0.id == item.id })
     }
 
     // MARK: - Private Helpers

@@ -1,196 +1,214 @@
 import SwiftUI
 
+/// おすすめ画面（Figma: 04 おすすめ 4:175 / 05 LIKE 3件未満 16:1015 / 06 サーバー未接続 16:1120）
 struct RecommendationsView: View {
     @EnvironmentObject private var viewModel: SwipeViewModel
+    @EnvironmentObject private var taste: TasteStore
+    @EnvironmentObject private var connection: ConnectionStatus
+    @EnvironmentObject private var navigation: AppNavigation
     @Environment(\.isTabActive) private var isTabActive
     @State private var selectedItem: Item?
-    @State private var tasteText: String?       = nil
-    @State private var isTasteLoading: Bool     = false
+    @State private var showsFilter = false
 
-    private let columns = [GridItem(.flexible()), GridItem(.flexible())]
+    private let columns = [
+        GridItem(.flexible(), spacing: Theme.Spacing.s12),
+        GridItem(.flexible(), spacing: Theme.Spacing.s12),
+    ]
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if viewModel.recommendedItems.isEmpty {
-                    emptyState
-                } else {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 12) {
-                            // ── AI スタイル診断カード ──────────────────
-                            tasteCard
-                                .padding(.horizontal, 16)
-                                .padding(.top, 8)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                header
+                VStack(alignment: .leading, spacing: Theme.Spacing.s20) {
+                    if viewModel.isPersonalized {
+                        diagnosis
+                        sectionHeader(title: "あなたへのおすすめ", subtitle: "LIKEした服とジャンルが同じで、価格が近い順")
+                        typeChips
+                    } else {
+                        personalizeProgress
+                        popularHeader
+                    }
+                    grid
+                }
+                .padding(.horizontal, Theme.Spacing.s16)
+                .padding(.top, Theme.Spacing.s4)
+                .padding(.bottom, Theme.Spacing.s24)
+            }
+        }
+        .background(Theme.Colors.surface)
+        .sheet(isPresented: $showsFilter) { FilterSheet() }
+        .fullScreenCover(item: $selectedItem) { item in
+            if let url = item.productUrl {
+                SafariView(url: url).ignoresSafeArea()
+            }
+        }
+        // 表示中のときだけ取りに行く（隠れている間に LIKE のたびに送り直さない）
+        .task(id: "\(viewModel.likedItems.count)-\(isTabActive)") {
+            guard isTabActive else { return }
+            await taste.load(likedItemCodes: viewModel.likedItems.map(\.itemCode))
+        }
+        .onChange(of: isTabActive) { _, isActive in
+            // ハートで付け外しした分を、開き直したときに反映する
+            if isActive { viewModel.refreshRecommendations() }
+        }
+    }
 
-                            // ── おすすめヘッダー ───────────────────────
-                            header
-                                .padding(.horizontal, 16)
+    // MARK: - Header（Top app bar large）
 
-                            // ── 商品グリッド ───────────────────────────
-                            LazyVGrid(columns: columns, spacing: 12) {
-                                ForEach(viewModel.recommendedItems) { item in
-                                    ItemGridCell(item: item)
-                                        .onTapGesture { selectedItem = item }
-                                }
-                            }
-                            .padding(.horizontal, 16)
-                        }
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Spacer()
+                Button {
+                    showsFilter = true
+                } label: {
+                    Image(systemName: "slider.horizontal.3")
+                        .font(.system(size: 20, weight: .regular))
+                        .foregroundStyle(Theme.Colors.onSurfaceVariant)
+                        .frame(width: 48, height: 48)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("絞り込み")
+            }
+            .padding(.horizontal, Theme.Spacing.s4)
+            .padding(.top, Theme.Spacing.s4)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("おすすめ")
+                    .typography(Theme.Typography.headlineMedium)
+                    .foregroundStyle(Theme.Colors.onSurface)
+                    .accessibilityAddTraits(.isHeader)
+                Text(viewModel.isPersonalized
+                     ? "LIKEした\(viewModel.likedItems.count)件をもとに選んでいます"
+                     : "LIKEすると、あなた向けに並び替わります")
+                    .typography(Theme.Typography.bodyMedium)
+                    .foregroundStyle(Theme.Colors.onSurfaceVariant)
+            }
+            .padding(.horizontal, Theme.Spacing.s16)
+            .padding(.bottom, Theme.Spacing.s12)
+        }
+    }
+
+    // MARK: - AI スタイル診断（つながらないときは未接続カード）
+
+    @ViewBuilder
+    private var diagnosis: some View {
+        if connection.state == .disconnected {
+            OfflineCard(lastSuccessAt: connection.lastSuccessAt, isRetrying: connection.isRetrying) {
+                Task {
+                    await connection.retry()
+                    if connection.state == .connected {
+                        await taste.load(likedItemCodes: viewModel.likedItems.map(\.itemCode))
                     }
                 }
             }
-            .navigationTitle("おすすめ")
-            // 表示中のときだけ取りに行く（隠れている間に LIKE のたびに送り直さない）
-            .task(id: "\(viewModel.likedItems.count)-\(isTabActive)") {
-                guard isTabActive else { return }
-                await loadTaste()
+        } else {
+            TasteCard(likeCount: viewModel.likedItems.count, text: taste.text, isFetching: taste.isFetching)
+        }
+    }
+
+    // MARK: - LIKE 3件未満（05）
+
+    private var personalizeProgress: some View {
+        let count = viewModel.likedItems.count
+        let threshold = SwipeViewModel.personalizeThreshold
+        return VStack(alignment: .leading, spacing: Theme.Spacing.s16) {
+            HStack(spacing: Theme.Spacing.s16) {
+                ProgressRing(value: count, total: threshold)
+                VStack(alignment: .leading, spacing: Theme.Spacing.s4) {
+                    Text("あと\(threshold - count)件LIKEすると、あなた向けに並び替わります")
+                        .typography(Theme.Typography.titleMedium)
+                        .foregroundStyle(Theme.Colors.onSurface)
+                    Text("LIKEした服と同じジャンル・近い価格の商品を優先して並べます")
+                        .typography(Theme.Typography.bodySmall)
+                        .foregroundStyle(Theme.Colors.onSurfaceVariant)
+                }
+                .fixedSize(horizontal: false, vertical: true)
             }
-            .fullScreenCover(item: $selectedItem) { item in
-                if let url = item.productUrl {
-                    SafariView(url: url).ignoresSafeArea()
+            Button {
+                navigation.selectedTab = .swipe
+            } label: {
+                HStack(spacing: Theme.Spacing.s8) {
+                    Image(systemName: "hand.draw")
+                        .font(.system(size: 17, weight: .medium))
+                    Text("スワイプを続ける")
+                        .typography(Theme.Typography.titleMedium)
+                }
+                .foregroundStyle(Theme.Colors.onPrimary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, Theme.Spacing.s16)
+                .background(Capsule().fill(Theme.Colors.primary))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(Theme.Spacing.s20)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.Radius.extraLarge)
+                .fill(Theme.Colors.surfaceContainerLow)
+        )
+    }
+
+    private var popularHeader: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text("いま人気のアイテム")
+                .typography(Theme.Typography.titleMedium)
+                .foregroundStyle(Theme.Colors.onSurface)
+            Spacer()
+            Text("レビューの多い順")
+                .typography(Theme.Typography.bodySmall)
+                .foregroundStyle(Theme.Colors.onSurfaceVariant)
+        }
+    }
+
+    // MARK: - 一覧
+
+    private func sectionHeader(title: String, subtitle: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .typography(Theme.Typography.titleMedium)
+                .foregroundStyle(Theme.Colors.onSurface)
+            Text(subtitle)
+                .typography(Theme.Typography.bodySmall)
+                .foregroundStyle(Theme.Colors.onSurfaceVariant)
+        }
+    }
+
+    private var typeChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: Theme.Spacing.s8) {
+                ForEach(UserProfile.ItemType.allCases) { type in
+                    FilterChip(label: type.displayName, isSelected: viewModel.recommendationType == type) {
+                        viewModel.recommendationType = type
+                    }
+                }
+            }
+            .padding(.horizontal, Theme.Spacing.s16)
+        }
+        .padding(.horizontal, -Theme.Spacing.s16)
+    }
+
+    @ViewBuilder
+    private var grid: some View {
+        if viewModel.recommendedItems.isEmpty {
+            Text("条件に合うおすすめがありません")
+                .typography(Theme.Typography.bodyMedium)
+                .foregroundStyle(Theme.Colors.onSurfaceVariant)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, Theme.Spacing.s32)
+        } else {
+            LazyVGrid(columns: columns, spacing: Theme.Spacing.s12) {
+                ForEach(viewModel.recommendedItems) { item in
+                    let isLiked = viewModel.isLiked(item)
+                    ProductCard(
+                        item: item,
+                        isLiked: isLiked,
+                        reason: viewModel.recommendationReason(for: item),
+                        onLikeTap: { viewModel.setLiked(item, !isLiked) }
+                    )
+                    .onTapGesture { selectedItem = item }
                 }
             }
         }
-    }
-
-    // MARK: - AI スタイル診断カード
-
-    @ViewBuilder
-    private var tasteCard: some View {
-        let likeCount = viewModel.likedItems.count
-
-        if isTasteLoading {
-            // 読み込み中
-            HStack(spacing: 10) {
-                ProgressView().scaleEffect(0.8)
-                Text("AIがあなたのスタイルを分析中...")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.systemGray6))
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-
-        } else if let text = tasteText {
-            // 診断結果あり
-            VStack(alignment: .leading, spacing: 6) {
-                Label("あなたのスタイル診断", systemImage: "sparkles")
-                    .font(.caption)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.purple)
-                Text(text)
-                    .font(.subheadline)
-                    .foregroundColor(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                LinearGradient(
-                    colors: [Color.purple.opacity(0.08), Color.pink.opacity(0.05)],
-                    startPoint: .topLeading, endPoint: .bottomTrailing
-                )
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(Color.purple.opacity(0.2), lineWidth: 1)
-            )
-
-        } else if likeCount > 0 && likeCount < 10 {
-            // LIKE数不足
-            HStack(spacing: 8) {
-                Image(systemName: "heart.fill")
-                    .foregroundColor(.pink.opacity(0.6))
-                    .font(.caption)
-                Text("あと\(10 - likeCount)件LIKEするとAIスタイル診断が始まります")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.systemGray6))
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-        } else if likeCount >= 10 {
-            // サーバー側のLIKE登録やAI生成がまだ追いついていない場合
-            HStack(spacing: 8) {
-                Image(systemName: "sparkles")
-                    .foregroundColor(.purple.opacity(0.7))
-                    .font(.caption)
-                Text("AIスタイル診断を準備中です。少し待つと表示されます")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.systemGray6))
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-        }
-        // likeCount == 0 の場合はカード非表示
-    }
-
-    // MARK: - Helpers
-
-    private func loadTaste() async {
-        guard viewModel.likedItems.count >= 10 else {
-            tasteText = nil
-            return
-        }
-
-        // LIKEがサーバーに届き終わってから taste を取りに行く
-        // （先に取ると、サーバー側のLIKEが10件に届く前で空が返る）
-        // syncLikes は並列・タイムアウト5秒なので、サーバー停止時も数秒で抜ける。待つ間は「準備中」表示のまま
-        let codes = viewModel.likedItems.map(\.itemCode)
-        await ActionService.syncLikes(itemCodes: codes)
-
-        guard !Task.isCancelled else { return }
-
-        // taste取得は1回だけ試みる（失敗してもクルクルを出さない）
-        isTasteLoading = true
-        defer { isTasteLoading = false }
-
-        do {
-            let resp = try await RecommendService.fetchTaste()
-            if let desc = resp.description, !desc.isEmpty {
-                tasteText = desc
-            }
-        } catch {
-            print("[Taste] fetch skipped: \(error.localizedDescription)")
-        }
-    }
-
-    private var header: some View {
-        Text(headerMessage)
-            .font(.subheadline)
-            .foregroundColor(.secondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var headerMessage: String {
-        let count = viewModel.likedItems.count
-        if count >= 3 {
-            return "あなたのLIKE \(count)件 をもとにおすすめしています"
-        } else if count > 0 {
-            return "あと\(3 - count)件LIKEするとパーソナライズされます"
-        } else {
-            return "スワイプ画面でLIKEするとパーソナライズされます"
-        }
-    }
-
-    private var emptyState: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "sparkles")
-                .font(.system(size: 60))
-                .foregroundColor(.purple.opacity(0.4))
-            Text("おすすめを準備できませんでした")
-                .font(.headline)
-                .foregroundColor(.secondary)
-            Text("スワイプを続けるとここに表示されます")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-        }
-        .padding()
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
