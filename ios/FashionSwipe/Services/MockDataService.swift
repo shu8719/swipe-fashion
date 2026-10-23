@@ -28,6 +28,24 @@ enum MockDataService {
         return uniqueItems.shuffled()
     }
 
+    /// 商品ID → アイテム種別（カードのタグや LIKE の件数チップに使う）。
+    /// 種別はファイル名から判定するため、汎用ファイル（ladies/mens 等）だけに入っている商品は nil。
+    private static var typeByItemCode: [String: UserProfile.ItemType]?
+
+    static func itemType(for itemCode: String) -> UserProfile.ItemType? {
+        if typeByItemCode == nil {
+            var map: [String: UserProfile.ItemType] = [:]
+            for file in filesForCategory(.all) {
+                guard let type = classifyType(file) else { continue }
+                for item in load(file: file) where map[item.id] == nil {
+                    map[item.id] = type
+                }
+            }
+            typeByItemCode = map
+        }
+        return typeByItemCode?[itemCode]
+    }
+
     // MARK: - 種別フィルタ（ファイル名キーワード判定）
 
     /// 指定種別にファイルが該当するか。

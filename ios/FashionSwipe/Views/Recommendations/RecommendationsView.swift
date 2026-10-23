@@ -2,6 +2,7 @@ import SwiftUI
 
 struct RecommendationsView: View {
     @EnvironmentObject private var viewModel: SwipeViewModel
+    @Environment(\.isTabActive) private var isTabActive
     @State private var selectedItem: Item?
     @State private var tasteText: String?       = nil
     @State private var isTasteLoading: Bool     = false
@@ -38,7 +39,11 @@ struct RecommendationsView: View {
                 }
             }
             .navigationTitle("おすすめ")
-            .task(id: viewModel.likedItems.count) { await loadTaste() }
+            // 表示中のときだけ取りに行く（隠れている間に LIKE のたびに送り直さない）
+            .task(id: "\(viewModel.likedItems.count)-\(isTabActive)") {
+                guard isTabActive else { return }
+                await loadTaste()
+            }
             .fullScreenCover(item: $selectedItem) { item in
                 if let url = item.productUrl {
                     SafariView(url: url).ignoresSafeArea()
