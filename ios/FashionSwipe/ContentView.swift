@@ -28,7 +28,7 @@ struct ContentView: View {
         switch tab {
         case .swipe:     SwipeView()
         case .recommend: RecommendationsView()
-        case .likes:     HistoryView()
+        case .likes:     LikesView()
         case .myPage:    SettingsView()
         }
     }

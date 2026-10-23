@@ -85,6 +85,15 @@ final class SwipeViewModel: ObservableObject {
         refreshRecommendations()
     }
 
+    /// LIKE 画面の選択モードで、選んだ商品をまとめて外す
+    // TODO: サーバーに LIKE を外す API ができたら、サーバー側からも外す
+    func unlike(itemIDs: Set<String>) {
+        guard !itemIDs.isEmpty else { return }
+        likedItems.removeAll { itemIDs.contains($0.id) }
+        saveLikedItems()
+        refreshRecommendations()
+    }
+
     func clearAllLikes() {
         guard !likedItems.isEmpty else { return }
         likedItems.removeAll()

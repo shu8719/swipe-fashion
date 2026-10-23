@@ -39,9 +39,20 @@ enum ScreenshotScenario: String {
     @MainActor
     static func apply(viewModel: SwipeViewModel, navigation: AppNavigation) {
         if let count = seedLikes {
-            // 毎回同じ商品になるよう、ID 順に先頭から選ぶ
+            // 毎回同じ商品になるよう ID 順に並べ、種別が偏らないよう種別ごとに1件ずつ順番に選ぶ
             let items = MockDataService.loadItems(for: .all).sorted { $0.id < $1.id }
-            viewModel.debugReplaceLikes(with: Array(items.prefix(count)))
+            let groups = Dictionary(grouping: items) { MockDataService.itemType(for: $0.id) }
+                .sorted { ($0.key?.rawValue ?? "~") < ($1.key?.rawValue ?? "~") }
+                .map(\.value)
+            var picked: [Item] = []
+            var index = 0
+            while picked.count < count, groups.contains(where: { $0.count > index }) {
+                for group in groups where group.count > index && picked.count < count {
+                    picked.append(group[index])
+                }
+                index += 1
+            }
+            viewModel.debugReplaceLikes(with: picked)
         }
         if let scenario = current {
             navigation.selectedTab = scenario.tab
