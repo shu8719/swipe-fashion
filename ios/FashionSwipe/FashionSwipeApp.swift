@@ -12,6 +12,11 @@ struct FashionSwipeApp: App {
                 .environmentObject(viewModel)
                 .environmentObject(authStore)
                 .environmentObject(navigation)
+                .onAppear {
+                    #if DEBUG
+                    ScreenshotScenario.apply(viewModel: viewModel, navigation: navigation)
+                    #endif
+                }
                 .task { await loginIfNeeded() }
         }
     }

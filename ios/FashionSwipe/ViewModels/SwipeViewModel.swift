@@ -7,11 +7,28 @@ final class SwipeViewModel: ObservableObject {
     @Published private(set) var likedItems: [Item] = []
     @Published private(set) var profile: UserProfile = .default
     @Published private(set) var recommendedItems: [Item] = []
+    /// 取り消せる直前のスワイプ（1件だけ）
+    @Published private(set) var lastSwipe: SwipeRecord?
+
+    struct SwipeRecord {
+        enum Action { case like, skip }
+        let item: Item
+        let action: Action
+        /// この LIKE で新しく LIKE 一覧に入ったか（取り消すときに外す）
+        let addedToLikes: Bool
+    }
 
     private let likedItemsKey  = "likedItems"
     private let userProfileKey = "userProfile"
 
-    var displayCards: [Item] { Array(cards.prefix(3)) }
+    /// 重ねて表示するカード（前面と、その後ろに等倍で待機する1枚）
+    var displayCards: [Item] { Array(cards.prefix(2)) }
+    var canUndo: Bool { lastSwipe != nil }
+
+    /// AI スタイル診断は LIKE 10件ごとに作り直される
+    static let tasteInterval = 10
+    var likesUntilNextTaste: Int { Self.tasteInterval - likedItems.count % Self.tasteInterval }
+    var tasteProgress: Int { likedItems.count % Self.tasteInterval }
 
     init() {
         likedItems = loadLikedItems()
@@ -24,12 +41,14 @@ final class SwipeViewModel: ObservableObject {
 
     func like() {
         guard let top = cards.first else { return }
-        if !likedItems.contains(where: { $0.id == top.id }) {
+        let isNew = !likedItems.contains(where: { $0.id == top.id })
+        if isNew {
             likedItems.append(top)
             saveLikedItems()
             refreshRecommendations()
         }
         cards.removeFirst()
+        lastSwipe = SwipeRecord(item: top, action: .like, addedToLikes: isNew)
         replenishIfNeeded()
         // バックエンドへ非同期送信（失敗しても UI はブロックしない）
         let code = top.itemCode
@@ -39,9 +58,24 @@ final class SwipeViewModel: ObservableObject {
     func dislike() {
         guard let top = cards.first else { return }
         cards.removeFirst()
+        lastSwipe = SwipeRecord(item: top, action: .skip, addedToLikes: false)
         replenishIfNeeded()
         let code = top.itemCode
         Task { try? await ActionService.sendSkip(itemCode: code) }
+    }
+
+    /// 直前の1件だけ戻す。サーバーには取り消しの API がないため、端末側だけ戻す
+    // TODO: サーバーに取り消し API ができたら、送信済みの LIKE / SKIP も取り消す
+    func undoLastSwipe() {
+        guard let record = lastSwipe else { return }
+        lastSwipe = nil
+        if record.addedToLikes {
+            likedItems.removeAll { $0.id == record.item.id }
+            saveLikedItems()
+            refreshRecommendations()
+        }
+        cards.removeAll { $0.id == record.item.id }
+        cards.insert(record.item, at: 0)
     }
 
     func unlike(item: Item) {
@@ -72,6 +106,24 @@ final class SwipeViewModel: ObservableObject {
     func resetFilters() {
         var p = profile; p.category = .all; p.priceRange = .all; p.itemType = .all
         updateProfile(p)
+    }
+
+    #if DEBUG
+    /// スクリーンショット用（DevTools/ScreenshotScenario）に LIKE を置き換える
+    func debugReplaceLikes(with items: [Item]) {
+        likedItems = items
+        saveLikedItems()
+        resetCards()
+        refreshRecommendations()
+    }
+    #endif
+
+    /// 絞り込みシートの「この条件で n件 を見る」の件数（スワイプに出る商品数＝LIKE 済みを除く）
+    func matchingItemCount(for p: UserProfile) -> Int {
+        let likedIds = Set(likedItems.map(\.id))
+        return MockDataService.loadItems(for: p.category, type: p.itemType)
+            .filter { p.priceRange.matches(price: $0.itemPrice) && !likedIds.contains($0.id) }
+            .count
     }
 
     // MARK: - Recommendations
@@ -107,7 +159,10 @@ final class SwipeViewModel: ObservableObject {
 
     // MARK: - Private Helpers
 
-    private func resetCards() { cards = loadFilteredCards() }
+    private func resetCards() {
+        cards = loadFilteredCards()
+        lastSwipe = nil   // 条件が変わったら、前の条件のカードは戻さない
+    }
 
     private func loadFilteredCards() -> [Item] {
         MockDataService.loadItems(for: profile.category, type: profile.itemType)

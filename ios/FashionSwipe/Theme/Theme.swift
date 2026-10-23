@@ -45,7 +45,7 @@ enum Theme {
         /// ロゴのグラデーション（Sky → Mint）
         static let brandGradient = LinearGradient(
             colors: [Color(light: 0x72C5F3, dark: 0x72C5F3), Color(light: 0x87DFA2, dark: 0x87DFA2)],
-            startPoint: .topLeading, endPoint: .bottomTrailing
+            startPoint: .leading, endPoint: .trailing
         )
 
         // 役割：LIKE は Tertiary（緑）、SKIP と削除は Error（赤）

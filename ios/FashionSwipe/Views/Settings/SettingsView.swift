@@ -13,35 +13,6 @@ struct SettingsView: View {
                         .autocorrectionDisabled(true)
                 }
 
-                Section("表示カテゴリ") {
-                    Picker("カテゴリ", selection: $draft.category) {
-                        ForEach(UserProfile.Category.allCases) { category in
-                            Text(category.displayName).tag(category)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                }
-
-                Section("アイテム種別") {
-                    Picker("アイテム種別", selection: $draft.itemType) {
-                        ForEach(UserProfile.ItemType.allCases) { type in
-                            Text(type.displayName).tag(type)
-                        }
-                    }
-                    .pickerStyle(.inline)
-                    .labelsHidden()
-                }
-
-                Section("価格帯") {
-                    Picker("価格帯", selection: $draft.priceRange) {
-                        ForEach(UserProfile.PriceRange.allCases) { range in
-                            Text(range.displayName).tag(range)
-                        }
-                    }
-                    .pickerStyle(.inline)
-                    .labelsHidden()
-                }
-
                 Section("好きなスタイル") {
                     ForEach(UserProfile.availableStyles, id: \.self) { style in
                         Toggle(style, isOn: bindingForStyle(style))
@@ -50,6 +21,8 @@ struct SettingsView: View {
             }
             .navigationTitle("設定")
             .onAppear { draft = viewModel.profile }
+            // 絞り込みシートで条件が変わったら下書きも合わせる（古い条件で上書きしないため）
+            .onChange(of: viewModel.profile) { _, newValue in draft = newValue }
             .onChange(of: draft) { _, newValue in
                 viewModel.updateProfile(newValue)
             }
