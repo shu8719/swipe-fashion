@@ -132,15 +132,17 @@ struct RecommendationsView: View {
             return
         }
 
-        // syncLikes はバックグラウンドで走らせてUIをブロックしない
+        // LIKEがサーバーに届き終わってから taste を取りに行く
+        // （先に取ると、サーバー側のLIKEが10件に届く前で空が返る）
+        // syncLikes は並列・タイムアウト5秒なので、サーバー停止時も数秒で抜ける。待つ間は「準備中」表示のまま
         let codes = viewModel.likedItems.map(\.itemCode)
-        Task { await ActionService.syncLikes(itemCodes: codes) }
+        await ActionService.syncLikes(itemCodes: codes)
+
+        guard !Task.isCancelled else { return }
 
         // taste取得は1回だけ試みる（失敗してもクルクルを出さない）
         isTasteLoading = true
         defer { isTasteLoading = false }
-
-        guard !Task.isCancelled else { return }
 
         do {
             let resp = try await RecommendService.fetchTaste()
