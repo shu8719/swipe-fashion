@@ -138,3 +138,15 @@ class TestTaste:
 
         assert row["description"] is not None
         assert row["like_count_at_gen"] == 10
+
+    def test_taste_survives_llm_failure(self, auth_client, monkeypatch):
+        import backend.config as cfg
+        monkeypatch.setattr(cfg, "LLM_PROVIDER", "ollama")
+        monkeypatch.setattr(cfg, "OLLAMA_BASE_URL", "http://127.0.0.1:9")  # 誰も待ち受けていないポート
+        for i in range(1, 11):
+            auth_client.post("/api/actions", json={"item_code": f"dummy:item{i:04d}", "action":"LIKE"})
+
+        resp = auth_client.get("/api/taste")
+
+        assert resp.status_code == 200
+        assert resp.get_json()["description"] is None
