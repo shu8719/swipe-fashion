@@ -142,6 +142,7 @@ cd swipe-fashion
 Python 3.10 以降を使います。
 
 ```bash
+cd server
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -149,19 +150,19 @@ cp .env.example .env    # このままで動きます（AI スタイル診断は
 python -m backend.app   # http://localhost:5001 で起動
 ```
 
-起動するたびに `FashionSwipe/Data` の商品データをデータベースに入れてベクトルに変換するため、使えるようになるまで30秒ほどかかります。
-テストは `pytest` で実行できます。
+起動するたびに `ios/FashionSwipe/Data` の商品データをデータベースに入れてベクトルに変換するため、使えるようになるまで30〜40秒ほどかかります。
+テストは `server/` で `pytest` を実行してください。
 
 AI スタイル診断を実際の LLM で試す場合は、`.env` の `LLM_PROVIDER` を `gemini`（`GOOGLE_API_KEY` が必要）か `ollama` に変えてください。
 
 ### 2. iOS アプリ
 
 ```bash
-open FashionSwipe.xcodeproj
+open ios/FashionSwipe.xcodeproj
 ```
 
 Xcode でシミュレータを選んで実行してください（iOS 26.5 以降が対象です）。シミュレータからは `http://127.0.0.1:5001` のサーバーに自動でつながります。
-実機で動かす場合は、ビルド設定にユーザー定義の `API_BASE_URL` を追加し、サーバーを動かしている Mac のアドレス（例: `http://<Mac のホスト名>.local:5001`）を設定してください。
+実機で動かす場合は、`ios/FashionSwipe/Services/APIClient.swift` の `resolveBaseURL` にある実機用の接続先を、サーバーを動かしている Mac のアドレス（例: `http://<Mac のホスト名>.local:5001`）に書き換えてください。
 
 サーバーを起動していなくても、スワイプ・おすすめ・履歴は動きます（AI スタイル診断だけ表示されません）。
 
@@ -199,22 +200,28 @@ Xcode でシミュレータを選んで実行してください（iOS 26.5 以�
 
 ```text
 swipe-fashion/
-├── FashionSwipe/          # iOS アプリ（SwiftUI）
-│   ├── Views/             # 画面（スワイプ・おすすめ・履歴・設定）と画像キャッシュ
-│   ├── ViewModels/        # 状態の管理・LIKE の保存・端末内のおすすめ計算
-│   ├── Models/            # 商品（楽天 API の形）・プロフィール
-│   ├── Services/          # 商品データの読み込み（DataManifest）とサーバーとの通信
-│   └── Data/              # 楽天 API から取得した商品 JSON（440ファイル）と DataManifest.json
-├── backend/               # Flask の REST API
-│   ├── routes/            # 認証・商品・LIKE/SKIP・おすすめ・お気に入り・好みの説明文
-│   ├── ai/                # K-means クラスタリング・LLM による説明文の生成
-│   ├── ingest/            # 楽天 API からの商品取得
-│   ├── jobs/              # クラスタリングのバッチ
-│   └── tests/             # pytest
-├── recommender/           # 商品テキスト → 22次元ベクトル、好みとのコサイン類似度で推薦
-├── docs/api_spec.md       # API 仕様
-└── import_data.py         # 商品データの投入とベクトル化をまとめて行うスクリプト
+├── ios/                       # iOS アプリ
+│   ├── FashionSwipe.xcodeproj
+│   └── FashionSwipe/
+│       ├── Views/             # 画面（スワイプ・おすすめ・履歴・設定）と画像キャッシュ
+│       ├── ViewModels/        # 状態の管理・LIKE の保存・端末内のおすすめ計算
+│       ├── Models/            # 商品（楽天 API の形）・プロフィール
+│       ├── Services/          # 商品データの読み込み（DataManifest）とサーバーとの通信
+│       └── Data/              # 楽天 API から取得した商品 JSON（440ファイル）と DataManifest.json
+├── server/                    # サーバー（Python）
+│   ├── backend/               # Flask の REST API
+│   │   ├── routes/            # 認証・商品・LIKE/SKIP・おすすめ・お気に入り・好みの説明文
+│   │   ├── ai/                # K-means クラスタリング・LLM による説明文の生成
+│   │   ├── ingest/            # 楽天 API からの商品取得
+│   │   ├── jobs/              # クラスタリングのバッチ
+│   │   └── tests/             # pytest
+│   ├── recommender/           # 商品テキスト → 22次元ベクトル、好みとのコサイン類似度で推薦
+│   ├── requirements.txt
+│   └── .env.example
+└── docs/                      # API 仕様・画面写真
 ```
+
+商品データは iOS アプリに同梱する `ios/FashionSwipe/Data` に一本化し、サーバーも同じファイルを読み込みます。
 
 ## おすすめの流れ
 
@@ -225,7 +232,7 @@ swipe-fashion/
 5. **推薦** — 好みのベクトルと各商品のベクトルのコサイン類似度で並べ、上位20件を返します（`/api/recommend`）
 6. **AI スタイル診断** — LIKE が10件たまるごとに、よく LIKE するタグやショップを LLM に渡して、好みの説明文を作り直します
 
-現在のアプリのおすすめ画面は 2 の端末内の計算を使っています。3〜5 のサーバー側の推薦にアプリをつなぐのは、今後の改善点です（通信部分は実装済み）。
+現在のアプリのおすすめ画面は 2 の端末内の計算を使っています。3〜5 のサーバー側の推薦にアプリをつなぐのは、今後の改善点です。
 
 ## 工夫した点
 

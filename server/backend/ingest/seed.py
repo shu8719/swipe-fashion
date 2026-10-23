@@ -1,14 +1,12 @@
-"""楽天API or sample_json フォールバックで商品DBを投入するスクリプト。
-使い方: python -m backend.ingest.seed [--limit 30]
+"""楽天APIから商品を取得してDBに投入するスクリプト（APIキー必要）。
+使い方: python -m backend.ingest.seed
 """
-import json
 import os
 import sys
 import time
-import argparse
 from pathlib import Path
 
-# プロジェクトルートをパスに追加
+# server/ をパスに追加
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from dotenv import load_dotenv
@@ -17,12 +15,6 @@ load_dotenv()
 from backend.db import init_db, get_conn
 from backend import config
 from recommender.vectorizer import vectorize_item
-
-_SAMPLE_FILES = [
-    Path(__file__).parent.parent.parent / "FashionSwipe" / "sample_ladies.json",
-    Path(__file__).parent.parent.parent / "FashionSwipe" / "sample_mens.json",
-    Path(__file__).parent.parent.parent / "FashionSwipe" / "sample_onepiece.json",
-]
 
 _RAKUTEN_APP_ID    = os.getenv("RAKUTEN_APP_ID")
 _RAKUTEN_ACCESS_KEY = os.getenv("RAKUTEN_ACCESS_KEY")
@@ -63,23 +55,6 @@ def _insert_item(item: dict):
     vectorize_item(item_code)
 
 
-def seed_from_sample_json(limit: int = 200) -> int:
-    """sample_*.json（frontend ブランチから取り込んだ楽天サンプルデータ）を投入する。"""
-    count = 0
-    for path in _SAMPLE_FILES:
-        if not path.exists():
-            print(f"  スキップ（ファイルなし）: {path}")
-            continue
-        data = json.loads(path.read_text())
-        for wrapper in data.get("Items", []):
-            item = wrapper.get("Item", wrapper)
-            _insert_item(item)
-            count += 1
-            if count >= limit:
-                return count
-    return count
-
-
 def seed_from_rakuten(hits_per_keyword: int = 30) -> int:
     """楽天APIから商品を取得して投入する（APIキー必要）。"""
     import requests
@@ -109,19 +84,16 @@ def seed_from_rakuten(hits_per_keyword: int = 30) -> int:
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--limit", type=int, default=200)
-    args = parser.parse_args()
+    if not (_RAKUTEN_APP_ID and _RAKUTEN_ACCESS_KEY):
+        print("RAKUTEN_APP_ID / RAKUTEN_ACCESS_KEY が未設定です。")
+        print("同梱の商品データを使う場合は、.env の RAKUTEN_JSON_DIR を設定して python -m backend.app を起動してください。")
+        return
 
     init_db()
     print("DB初期化完了")
 
-    if _RAKUTEN_APP_ID and _RAKUTEN_ACCESS_KEY:
-        print("楽天APIから取得中...")
-        count = seed_from_rakuten(hits_per_keyword=30)
-    else:
-        print("APIキー未設定 → sample_json フォールバック")
-        count = seed_from_sample_json(limit=args.limit)
+    print("楽天APIから取得中...")
+    count = seed_from_rakuten(hits_per_keyword=30)
 
     print(f"投入完了: {count} 件")
     with get_conn() as conn:

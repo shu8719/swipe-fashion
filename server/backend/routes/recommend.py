@@ -2,22 +2,15 @@ from flask import Blueprint, jsonify, g
 from backend.auth import login_required
 from backend.db import get_conn
 from backend.routes.items import _row_to_rakuten
+from recommender.recommender import get_recommendations
 
 bp = Blueprint("recommend", __name__, url_prefix="/api/recommend")
-
-
-def _get_recommender():
-    try:
-        from recommender.recommender import get_recommendations
-    except ImportError:
-        from recommender.mock_recommender import get_recommendations
-    return get_recommendations
 
 
 @bp.get("")
 @login_required
 def recommend():
-    results = _get_recommender()(g.user_id, limit=20)
+    results = get_recommendations(g.user_id, limit=20)
     if not results:
         return jsonify([])
 

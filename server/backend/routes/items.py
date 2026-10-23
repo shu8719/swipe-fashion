@@ -6,7 +6,7 @@ bp = Blueprint("items", __name__, url_prefix="/api/items")
 
 
 def _row_to_rakuten(row) -> dict:
-    """DBRow → Swift APIItem が JSONDecoder できる楽天互換形式に変換。"""
+    """DBRow → Swift の Item が JSONDecoder で読める楽天互換形式に変換。"""
     d = dict(row)
     image_url = d.get("image_url") or ""
     return {
