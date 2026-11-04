@@ -39,28 +39,30 @@ final class SwipeViewModel: ObservableObject {
 
     // MARK: - Swipe Actions
 
-    func like() {
-        guard let top = cards.first else { return }
-        let isNew = !likedItems.contains(where: { $0.id == top.id })
+    /// スワイプした商品を LIKE する。アニメーションの間に先頭が入れ替わることがあるので、
+    /// 先頭ではなく、スワイプを始めたときのカードを受け取る
+    func like(_ item: Item) {
+        guard let index = cards.firstIndex(where: { $0.id == item.id }) else { return }
+        let isNew = !likedItems.contains(where: { $0.id == item.id })
         if isNew {
-            likedItems.append(top)
+            likedItems.append(item)
             saveLikedItems()
             refreshRecommendations()
         }
-        cards.removeFirst()
-        lastSwipe = SwipeRecord(item: top, action: .like, addedToLikes: isNew)
+        cards.remove(at: index)
+        lastSwipe = SwipeRecord(item: item, action: .like, addedToLikes: isNew)
         replenishIfNeeded()
         // バックエンドへ非同期送信（失敗しても UI はブロックしない）
-        let code = top.itemCode
+        let code = item.itemCode
         Task { try? await ActionService.sendLike(itemCode: code) }
     }
 
-    func dislike() {
-        guard let top = cards.first else { return }
-        cards.removeFirst()
-        lastSwipe = SwipeRecord(item: top, action: .skip, addedToLikes: false)
+    func dislike(_ item: Item) {
+        guard let index = cards.firstIndex(where: { $0.id == item.id }) else { return }
+        cards.remove(at: index)
+        lastSwipe = SwipeRecord(item: item, action: .skip, addedToLikes: false)
         replenishIfNeeded()
-        let code = top.itemCode
+        let code = item.itemCode
         Task { try? await ActionService.sendSkip(itemCode: code) }
     }
 
@@ -190,8 +192,13 @@ final class SwipeViewModel: ObservableObject {
     func setLiked(_ item: Item, _ liked: Bool) {
         let isLiked = likedItems.contains(where: { $0.id == item.id })
         guard liked != isLiked else { return }
+        let wasPersonalized = isPersonalized
         if liked {
             likedItems.append(item)
+            // LIKE 済みはスワイプに出さない（loadFilteredCards と同じ扱い）
+            cards.removeAll { $0.id == item.id }
+            if lastSwipe?.item.id == item.id { lastSwipe = nil }
+            replenishIfNeeded()
             let code = item.itemCode
             Task { try? await ActionService.sendLike(itemCode: code) }
         } else {
@@ -199,6 +206,9 @@ final class SwipeViewModel: ObservableObject {
             likedItems.removeAll { $0.id == item.id }
         }
         saveLikedItems()
+        // LIKE 3件をまたいで並べ方（人気順 ⇔ あなた向け）が変わるときだけ作り直し、
+        // 見出しと一覧の中身がずれないようにする
+        if isPersonalized != wasPersonalized { refreshRecommendations() }
     }
 
     func isLiked(_ item: Item) -> Bool {

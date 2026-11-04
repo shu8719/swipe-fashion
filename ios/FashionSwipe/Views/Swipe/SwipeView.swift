@@ -159,18 +159,12 @@ struct SwipeView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     // 2枚を1つの ForEach で描画し、商品IDを安定IDにする。
+                    // 後ろのカードは等倍のまま実際の商品を出しておき、ドラッグ中に次の商品が見えるようにする。
                     // 前面が飛んだあと、後ろのカードが y=10 → 0 へなめらかに出てくる
                     ForEach(Array(viewModel.displayCards.enumerated()).reversed(), id: \.element.id) { index, item in
                         let isTop = index == 0
                         SwipeCard(item: item, dragProgress: isTop ? dragProgress : 0) {
                             productToOpen = item
-                        }
-                        .overlay {
-                            // 後ろのカードは等倍のまま、無地で待機させる
-                            RoundedRectangle(cornerRadius: Theme.Radius.extraLarge)
-                                .fill(Theme.Colors.surfaceContainerHigh)
-                                .opacity(isTop ? 0 : 1)
-                                .allowsHitTesting(false)
                         }
                         .frame(width: width)
                         .offset(x: isTop ? offset.width : 0,
@@ -305,7 +299,8 @@ struct SwipeView: View {
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .disabled(!viewModel.canUndo)
+        // 飛んでいく間に戻すと、飛んだカードとは別のカードが評価されてしまうので押せなくする
+        .disabled(!viewModel.canUndo || isFlyingOut)
         .opacity(viewModel.canUndo ? 1 : 0.38)
         .accessibilityLabel("取り消し")
     }
@@ -338,7 +333,8 @@ struct SwipeView: View {
 
     private func performFlyOut(direction: SwipeDirection) {
         // 飛んでいく間は次の操作を受け付けない（連打で見ていないカードまで評価しないため）
-        guard !isFlyingOut else { return }
+        // 評価するカードは飛ばし始めた時点で決めておく
+        guard !isFlyingOut, let swiped = viewModel.cards.first else { return }
         isFlyingOut = true
         let targetX: CGFloat = direction == .like ? 700 : -700
         withAnimation(.easeOut(duration: 0.28)) {
@@ -346,8 +342,8 @@ struct SwipeView: View {
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
             switch direction {
-            case .like: viewModel.like()
-            case .skip: viewModel.dislike()
+            case .like: viewModel.like(swiped)
+            case .skip: viewModel.dislike(swiped)
             }
             offset = .zero
             isFlyingOut = false

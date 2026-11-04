@@ -11,6 +11,7 @@ struct ConfirmDialog: View {
     let onConfirm: () -> Void
 
     @State private var isShown = false
+    @State private var isClosing = false
 
     var body: some View {
         ZStack {
@@ -64,6 +65,9 @@ struct ConfirmDialog: View {
     }
 
     private func close(then action: @escaping () -> Void) {
+        // フェードアウト中の2回目のタップで、キャンセルと削除が両方走らないようにする
+        guard !isClosing else { return }
+        isClosing = true
         withAnimation(.easeIn(duration: 0.15)) { isShown = false }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { action() }
     }
