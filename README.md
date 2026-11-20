@@ -26,6 +26,17 @@ LIKE が10件たまると、AI が「あなたはこういう服が好きな傾�
 |:--:|:--:|:--:|:--:|
 | <img src="docs/screens/01_swipe.png" width="180"> | <img src="docs/screens/02_recommend.png" width="180"> | <img src="docs/screens/03_likes.png" width="180"> | <img src="docs/screens/04_mypage.png" width="180"> |
 
+## システム構成
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/architecture-dark.png">
+  <img src="docs/architecture.png" alt="システム構成図: ユーザーが SwiftUI の iOS アプリでスワイプすると、アプリは LIKE を送り、おすすめを Flask の REST API から取る。Flask は SQLite に LIKE や商品を保存し、scikit-learn で22次元のタグによる推薦を行い、Gemini で AI スタイル診断の文章を作る。商品データは開発時に楽天市場 API から取得した JSON 440ファイルで、アプリに同梱し、サーバーは起動時に SQLite へ入れる" width="100%">
+</picture>
+
+- **おすすめの流れ（青）** — スワイプした LIKE をサーバーへ送り、Flask が scikit-learn で好みに近い商品を選んで返します
+- **AI スタイル診断** — LIKE が10件たまるごとに、Flask が集計結果を Gemini に渡して文章を作ります
+- **商品データ** — 楽天市場 API から開発時に取得した JSON をアプリに同梱し、サーバーも同じファイルを起動時に SQLite へ入れます。サーバーにつながらないときは、アプリがこのデータだけでスワイプとおすすめを続けます
+
 ## チームと担当
 
 3人で役割を分け、約2週間で開発しました。
@@ -217,7 +228,7 @@ swipe-fashion/
 │   ├── recommender/           # 商品テキスト → 22次元ベクトル、好みとのコサイン類似度で推薦
 │   ├── requirements.txt
 │   └── .env.example
-└── docs/                      # API 仕様・画面写真
+└── docs/                      # API 仕様・システム構成図・画面写真とデモ GIF
 ```
 
 商品データは iOS アプリに同梱する `ios/FashionSwipe/Data` に一本化し、サーバーも同じファイルを読み込みます。
