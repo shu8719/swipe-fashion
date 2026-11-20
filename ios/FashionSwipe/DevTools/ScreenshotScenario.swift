@@ -15,6 +15,7 @@ enum ScreenshotScenario: String {
     case likesSelecting     = "likes-select"        // 08 選択モード
     case myPage             = "mypage"              // 09
     case myPageDeleteAll    = "mypage-delete"       // 10 全削除の確認
+    case demo               = "demo"                // README の GIF（スワイプ → 取り消し → おすすめを自動で再生）
 
     /// 起動オプション `-scenario <name>`（UserDefaults の引数ドメインに入る）
     static var current: ScreenshotScenario? {
@@ -30,7 +31,7 @@ enum ScreenshotScenario: String {
 
     var tab: AppTab {
         switch self {
-        case .swipe, .swipeLike, .filter:        return .swipe
+        case .swipe, .swipeLike, .filter, .demo: return .swipe
         case .recommend, .recommendFewLikes:     return .recommend
         case .likes, .likesSelecting:            return .likes
         case .myPage, .myPageDeleteAll:          return .myPage

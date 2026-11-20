@@ -7,6 +7,9 @@ struct SwipeView: View {
     @State private var isFlyingOut = false
     @State private var showsFilter = false
     @State private var productToOpen: Item?
+    #if DEBUG
+    @EnvironmentObject private var navigation: AppNavigation
+    #endif
 
     private let threshold: CGFloat = 120
     /// カードの画像より下（ショップ名〜価格の行）の高さ
@@ -41,7 +44,52 @@ struct SwipeView: View {
                 SafariView(url: url).ignoresSafeArea()
             }
         }
+        #if DEBUG
+        .task {
+            if ScreenshotScenario.current == .demo { await playDemo() }
+        }
+        #endif
     }
+
+    #if DEBUG
+    /// README の GIF 用。ドラッグで LIKE → ドラッグで SKIP → 取り消し → LIKE → おすすめ画面、の順に自動で見せる。
+    /// カードは指でドラッグしたときと同じ offset を動かし、飛ばすところはボタンやドラッグと同じ performFlyOut を使う
+    private func playDemo() async {
+        func wait(_ seconds: Double) async { try? await Task.sleep(for: .seconds(seconds)) }
+        func dragAndRelease(_ direction: SwipeDirection) async {
+            let x: CGFloat = direction == .like ? threshold + 30 : -(threshold + 30)
+            withAnimation(.easeInOut(duration: 0.7)) { offset = CGSize(width: x, height: 6) }
+            await wait(0.9)
+            performFlyOut(direction: direction)
+            await wait(1.0)
+        }
+
+        // 何の商品か分かりやすいよう、服（トップス・ボトムス・ワンピース）だけを、毎回同じ順で出す。福袋は外す
+        let clothes = ProductCatalog.loadItems(for: .all)
+            .filter { item in
+                guard let type = ProductCatalog.itemType(for: item.id) else { return false }
+                return [.tops, .bottoms, .onepiece].contains(type)
+            }
+            .filter { !$0.itemName.contains("福袋") && !$0.itemName.localizedCaseInsensitiveContains("happy bag") }
+            .filter { !viewModel.isLiked($0) }
+            .filter { item in ScreenshotScenario.seedKeyword.map { item.itemName.contains($0) } ?? true }
+            .sorted { $0.id < $1.id }
+        viewModel.debugSetCards(Array(clothes.prefix(6)))
+
+        await wait(2.0)
+        await dragAndRelease(.like)
+        await dragAndRelease(.skip)
+        viewModel.undoLastSwipe()
+        await wait(1.2)
+        await dragAndRelease(.like)
+        navigation.selectedTab = .recommend
+        await wait(4.0)
+        viewModel.recommendationType = .tops
+        await wait(3.0)
+        viewModel.recommendationType = .all
+        await wait(1.5)
+    }
+    #endif
 
     // MARK: - Top app bar
 
