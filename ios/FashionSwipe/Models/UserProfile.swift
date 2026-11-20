@@ -52,7 +52,7 @@ struct UserProfile: Codable, Equatable {
         }
     }
 
-    /// アイテム種別フィルタ。判定はファイル名キーワードで行う（MockDataService）。
+    /// アイテム種別フィルタ。判定はファイル名キーワードで行う（ProductCatalog）。
     enum ItemType: String, Codable, CaseIterable, Identifiable {
         case all
         case tops

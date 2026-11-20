@@ -30,17 +30,22 @@ final class APIClient {
 
     private init() {}
 
+    /// 接続先。Xcode のスキームの環境変数 `API_BASE_URL` で変えられる
+    /// （スキームの設定は git に入らないので、自分の Mac の名前をコードに書かずに済む）
     private static func resolveBaseURL() -> String {
-        if let value = Bundle.main.object(forInfoDictionaryKey: "API_BASE_URL") as? String,
-           !value.isEmpty,
-           !value.contains("$(") {
-            return value
-        }
+        let env = ProcessInfo.processInfo.environment["API_BASE_URL"].flatMap { $0.isEmpty ? nil : $0 }
 
         #if targetEnvironment(simulator)
-        return "http://127.0.0.1:5001"
+        return env ?? "http://127.0.0.1:5001"
         #else
-        return "http://The-Herta-2.local:5001"
+        // 実機は Xcode から起動したときだけ環境変数が渡るので、ホーム画面から開き直しても使えるよう覚えておく
+        let savedKey = "api_base_url"
+        if let env {
+            UserDefaults.standard.set(env, forKey: savedKey)
+            return env
+        }
+        // 未設定のときはつながらず、端末内のデータだけで動く
+        return UserDefaults.standard.string(forKey: savedKey) ?? "http://localhost:5001"
         #endif
     }
 

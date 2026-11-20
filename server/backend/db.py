@@ -107,6 +107,7 @@ def load_rakuten_json_dir(json_dir: str) -> int:
         return 0
     
     count = 0
+    codes_by_file: dict[str, list[str]] = {}
     with get_conn() as conn:
         for jf in json_files:
             try:
@@ -117,6 +118,7 @@ def load_rakuten_json_dir(json_dir: str) -> int:
                 continue
             
             items = data.get("Items", [])
+            file_codes = codes_by_file.setdefault(jf.stem, [])
             for wrapper in items:
                 item = wrapper.get("Item", {})
                 item_code = item.get("itemCode", "")
@@ -148,7 +150,22 @@ def load_rakuten_json_dir(json_dir: str) -> int:
                         item.get("genreId", 0),
                     ),
                 )
+                file_codes.append(item_code)
                 count += 1
-    
-    print(f"楽天JSON投入完了: {count}件 ({len(json_files)}ファイル)")
+
+        app_count = _save_app_catalog(conn, json_path / "DataManifest.json", codes_by_file)
+
+    print(f"楽天JSON投入完了: {count}件 ({len(json_files)}ファイル)、うちアプリに載せている商品: {app_count}件")
     return count
+
+
+def _save_app_catalog(conn, manifest_path: Path, codes_by_file: dict[str, list[str]]) -> int:
+    """DataManifest.json（iOS アプリが読むファイルの一覧）に載っている商品を app_catalog に入れ直す。"""
+    conn.execute("DELETE FROM app_catalog")
+    if not manifest_path.exists():
+        return 0
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    files = [name for names in manifest.get("categories", {}).values() for name in names]
+    codes = {code for name in files for code in codes_by_file.get(name, [])}
+    conn.executemany("INSERT INTO app_catalog (item_code) VALUES (?)", [(c,) for c in codes])
+    return len(codes)

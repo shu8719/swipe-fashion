@@ -4,6 +4,7 @@ import Foundation
 /// Figma と見比べるスクリーンショット用に、起動オプションで画面と状態を直接開く（DEBUG ビルドのみ）。
 ///
 ///     xcrun simctl launch <device> FS.FashionSwipe -scenario swipe-like -seedLikes 17
+///     xcrun simctl launch <device> FS.FashionSwipe -scenario recommend -seedLikes 17 -seedKeyword きれいめ
 enum ScreenshotScenario: String {
     case swipe              = "swipe"               // 01
     case swipeLike          = "swipe-like"          // 02 ドラッグ中（LIKE）
@@ -36,12 +37,20 @@ enum ScreenshotScenario: String {
         }
     }
 
+    /// 起動オプション `-seedKeyword <語>` で、商品名にこの語を含む商品から LIKE を選ぶ
+    /// （好みに一貫性のある LIKE にして、AI スタイル診断やおすすめの見え方を確かめるため）
+    static var seedKeyword: String? {
+        UserDefaults.standard.string(forKey: "seedKeyword").flatMap { $0.isEmpty ? nil : $0 }
+    }
+
     @MainActor
     static func apply(viewModel: SwipeViewModel, navigation: AppNavigation) {
         if let count = seedLikes {
             // 毎回同じ商品になるよう ID 順に並べ、種別が偏らないよう種別ごとに1件ずつ順番に選ぶ
-            let items = MockDataService.loadItems(for: .all).sorted { $0.id < $1.id }
-            let groups = Dictionary(grouping: items) { MockDataService.itemType(for: $0.id) }
+            let items = ProductCatalog.loadItems(for: .all)
+                .filter { item in seedKeyword.map { item.itemName.contains($0) } ?? true }
+                .sorted { $0.id < $1.id }
+            let groups = Dictionary(grouping: items) { ProductCatalog.itemType(for: $0.id) }
                 .sorted { ($0.key?.rawValue ?? "~") < ($1.key?.rawValue ?? "~") }
                 .map(\.value)
             var picked: [Item] = []

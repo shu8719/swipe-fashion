@@ -63,3 +63,9 @@ CREATE TABLE IF NOT EXISTS user_clusters (
   cluster_id  INTEGER,
   assigned_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
+
+-- iOS アプリに載せている商品（DataManifest.json に登録したファイルの商品）。
+-- おすすめを、アプリで種別やカテゴリが分かる商品だけに絞るときに使う
+CREATE TABLE IF NOT EXISTS app_catalog (
+  item_code TEXT PRIMARY KEY
+);

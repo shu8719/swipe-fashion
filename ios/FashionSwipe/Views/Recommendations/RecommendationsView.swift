@@ -9,6 +9,8 @@ struct RecommendationsView: View {
     @Environment(\.isTabActive) private var isTabActive
     @State private var selectedItem: Item?
     @State private var showsFilter = false
+    /// タブを開いてから、まだサーバーのおすすめを取り直していないか
+    @State private var needsServerRecommendations = true
 
     private let columns = [
         GridItem(.flexible(), spacing: Theme.Spacing.s12),
@@ -22,7 +24,7 @@ struct RecommendationsView: View {
                 VStack(alignment: .leading, spacing: Theme.Spacing.s20) {
                     if viewModel.isPersonalized {
                         diagnosis
-                        sectionHeader(title: "あなたへのおすすめ", subtitle: "LIKEした服とジャンルが同じで、価格が近い順")
+                        sectionHeader(title: "あなたへのおすすめ", subtitle: recommendationSubtitle)
                         typeChips
                     } else {
                         personalizeProgress
@@ -42,14 +44,46 @@ struct RecommendationsView: View {
                 SafariView(url: url).ignoresSafeArea()
             }
         }
-        // 表示中のときだけ取りに行く（隠れている間に LIKE のたびに送り直さない）
+        // 表示中のときだけ取りに行く（隠れている間に LIKE のたびに送り直さない）。
+        // タブを開いたときはおすすめと診断の両方、開いている間にハートで LIKE が増減したときは、
+        // 一覧が並び替わらないよう診断だけ取り直す
         .task(id: "\(viewModel.likedItems.count)-\(isTabActive)") {
-            guard isTabActive else { return }
-            await taste.load(likedItemCodes: viewModel.likedItems.map(\.itemCode))
+            guard isTabActive else {
+                needsServerRecommendations = true
+                return
+            }
+            await loadFromServer(includingRecommendations: needsServerRecommendations)
         }
         .onChange(of: isTabActive) { _, isActive in
             // ハートで付け外しした分を、開き直したときに反映する
             if isActive { viewModel.refreshRecommendations() }
+        }
+    }
+
+    /// 手元の LIKE をサーバーへ送り直してから、サーバーのおすすめと AI 診断を取りに行く
+    /// （先に取ると、届く前の LIKE で計算される）。どちらも失敗したら端末内の表示のまま
+    private func loadFromServer(includingRecommendations: Bool) async {
+        guard viewModel.isPersonalized else { return }
+        // 送り直しは並列・タイムアウト5秒なので、サーバーが止まっていても数秒で抜ける
+        await ActionService.syncLikes(itemCodes: viewModel.likedItems.map(\.itemCode))
+        guard !Task.isCancelled else { return }
+        let likeCount = viewModel.likedItems.count
+        if includingRecommendations {
+            async let recommendations: Void = viewModel.loadServerRecommendations()
+            async let diagnosis: Void = taste.load(likeCount: likeCount)
+            _ = await (recommendations, diagnosis)
+            // 途中で取り消されたら、次の実行でもう一度おすすめを取る
+            if !Task.isCancelled { needsServerRecommendations = false }
+        } else {
+            await taste.load(likeCount: likeCount)
+        }
+    }
+
+    private var recommendationSubtitle: String {
+        switch viewModel.recommendationSource {
+        case .server:  return "LIKEした服とスタイル・色・シルエットが近い順"
+        case .local:   return "LIKEした服とジャンルが同じで、価格が近い順"
+        case .popular: return "レビューの多い順"
         }
     }
 
@@ -99,7 +133,7 @@ struct RecommendationsView: View {
                 Task {
                     await connection.retry()
                     if connection.state == .connected {
-                        await taste.load(likedItemCodes: viewModel.likedItems.map(\.itemCode))
+                        await loadFromServer(includingRecommendations: true)
                     }
                 }
             }
@@ -120,7 +154,7 @@ struct RecommendationsView: View {
                     Text("あと\(threshold - count)件LIKEすると、あなた向けに並び替わります")
                         .typography(Theme.Typography.titleMedium)
                         .foregroundStyle(Theme.Colors.onSurface)
-                    Text("LIKEした服と同じジャンル・近い価格の商品を優先して並べます")
+                    Text("LIKEした服とスタイル・色・シルエットが近い商品を優先して並べます")
                         .typography(Theme.Typography.bodySmall)
                         .foregroundStyle(Theme.Colors.onSurfaceVariant)
                 }

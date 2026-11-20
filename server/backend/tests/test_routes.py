@@ -104,6 +104,38 @@ class TestRecommend:
         if items:
             assert "score" in items[0]
 
+    def _like_korean_items(self, auth_client):
+        from recommender.vectorizer import vectorize_all
+        vectorize_all()
+        # 韓国系・モノトーンのダミー商品
+        for code in ["dummy:item0001", "dummy:item0003", "dummy:item0012"]:
+            auth_client.post("/api/actions", json={"item_code": code, "action": "LIKE"})
+
+    def test_recommend_limit_and_reasons(self, auth_client):
+        self._like_korean_items(auth_client)
+        items = auth_client.get("/api/recommend?limit=5").get_json()
+        assert 0 < len(items) <= 5
+        assert all(isinstance(i["reasons"], list) for i in items)
+        # 一番上の商品は、LIKE した服と同じタグを理由に持つ
+        assert set(items[0]["reasons"]) & {"韓国系", "モノトーン", "コットン", "リラックス", "オーバーサイズ"}
+
+    def test_recommend_excludes_liked(self, auth_client):
+        self._like_korean_items(auth_client)
+        codes = {i["itemCode"] for i in auth_client.get("/api/recommend?limit=100").get_json()}
+        assert "dummy:item0001" not in codes
+
+    def test_recommend_scope_app(self, auth_client):
+        self._like_korean_items(auth_client)
+        from backend.db import get_conn
+        app_codes = {"dummy:item0005", "dummy:item0018"}
+        with get_conn() as conn:
+            conn.executemany("INSERT INTO app_catalog VALUES (?)", [(c,) for c in app_codes])
+        codes = {i["itemCode"] for i in auth_client.get("/api/recommend?scope=app&limit=100").get_json()}
+        assert codes == app_codes
+
+    def test_recommend_invalid_limit(self, auth_client):
+        assert auth_client.get("/api/recommend?limit=abc").status_code == 400
+
 
 class TestFavorites:
     def test_empty_at_first(self, auth_client):
@@ -150,3 +182,16 @@ class TestTaste:
 
         assert resp.status_code == 200
         assert resp.get_json()["description"] is None
+
+
+def test_device_auth_concurrent_same_id(app):
+    # 同じ device_id のログインが同時に届いても、500 にならず同じユーザーになる
+    from concurrent.futures import ThreadPoolExecutor
+    def login(_):
+        with app.test_client() as c:
+            r = c.post("/api/auth/device", json={"device_id": "same-device"})
+            return r.status_code, (r.get_json() or {}).get("user_id")
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        results = list(ex.map(login, range(16)))
+    assert {code for code, _ in results} == {200}
+    assert len({uid for _, uid in results}) == 1

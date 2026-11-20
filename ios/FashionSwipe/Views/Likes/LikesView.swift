@@ -20,7 +20,7 @@ struct LikesView: View {
 
     private var visibleItems: [Item] {
         guard typeFilter != .all else { return likedNewestFirst }
-        return likedNewestFirst.filter { MockDataService.itemType(for: $0.id) == typeFilter }
+        return likedNewestFirst.filter { ProductCatalog.itemType(for: $0.id) == typeFilter }
     }
 
     var body: some View {
@@ -117,7 +117,7 @@ struct LikesView: View {
 
     private var countChips: some View {
         let types = UserProfile.ItemType.allCases.filter { $0 != .all }
-        let counts = Dictionary(grouping: viewModel.likedItems.compactMap { MockDataService.itemType(for: $0.id) }, by: { $0 })
+        let counts = Dictionary(grouping: viewModel.likedItems.compactMap { ProductCatalog.itemType(for: $0.id) }, by: { $0 })
             .mapValues(\.count)
 
         return ScrollView(.horizontal, showsIndicators: false) {

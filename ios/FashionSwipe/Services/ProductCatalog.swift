@@ -1,6 +1,7 @@
 import Foundation
 
-enum MockDataService {
+/// アプリに同梱した楽天の商品データ（Data/ の JSON）を読む。読むファイルは DataManifest.json で決める
+enum ProductCatalog {
     private struct Manifest: Decodable {
         let version: Int
         let categories: [String: [String]]

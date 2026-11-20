@@ -71,6 +71,7 @@ struct ProductCard: View {
                     Text(reason)
                         .typography(Theme.Typography.labelSmall)
                         .foregroundStyle(Theme.Colors.onSurface)
+                        .lineLimit(1)
                         .padding(.horizontal, 10)
                         .padding(.vertical, Theme.Spacing.s4)
                         .background(Capsule().fill(Theme.Colors.surfaceContainerLowest))

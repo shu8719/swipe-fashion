@@ -5,7 +5,7 @@ import numpy as np
 from datetime import datetime, timezone
 from sklearn.metrics.pairwise import cosine_similarity
 from backend.db import get_conn
-from recommender.vectorizer import get_vector, vectorize_item, TAG_DIM
+from recommender.vectorizer import get_vector, vectorize_item, TAG_DIM, TAG_INDEX
 
 _LIKE_WEIGHT = 1.0
 _SKIP_WEIGHT = -0.5
@@ -50,8 +50,31 @@ def _build_preference_vector(user_id: int) -> np.ndarray | None:
     return pref / total_w
 
 
-def get_recommendations(user_id: int, limit: int = 20) -> list[dict]:
-    """AI-03: コサイン類似度で上位 limit 件を返す。"""
+# おすすめの理由として返すタグの数
+_MAX_REASONS = 2
+# 価格帯タグ（低 / 中 / 高）は、理由としては「同じ価格帯」と出す
+_PRICE_TAGS = {"低", "中", "高"}
+_TAG_NAMES  = {i: tag for tag, i in TAG_INDEX.items()}
+
+
+def _reasons(pref: np.ndarray, vec: np.ndarray) -> list[str]:
+    """好みのベクトルを押し上げているタグのうち、この商品も持っているものを、効いている順に返す。"""
+    contrib = pref * vec
+    reasons: list[str] = []
+    for i in np.argsort(-contrib):
+        if contrib[i] <= 0 or len(reasons) >= _MAX_REASONS:
+            break
+        tag = _TAG_NAMES[int(i)]
+        reasons.append("同じ価格帯" if tag in _PRICE_TAGS else tag)
+    return reasons
+
+
+def get_recommendations(user_id: int, limit: int = 20, app_only: bool = False) -> list[dict]:
+    """AI-03: コサイン類似度で上位 limit 件を返す。
+
+    app_only=True のときは、iOS アプリに載せている商品（app_catalog）だけから選ぶ。
+    類似度が同じ商品は、レビューの多い順に並べる（タグが同じ商品は類似度も同じになりやすいため）。
+    """
     pref = _build_preference_vector(user_id)
 
     with get_conn() as conn:
@@ -60,29 +83,38 @@ def get_recommendations(user_id: int, limit: int = 20) -> list[dict]:
                 "SELECT item_code FROM user_actions WHERE user_id=?", (user_id,)
             ).fetchall()
         )
-        all_vecs = conn.execute(
-            "SELECT item_code, vector_json FROM item_vectors"
-        ).fetchall()
+        sql = """
+            SELECT v.item_code, v.vector_json, COALESCE(i.review_count, 0) AS review_count
+            FROM item_vectors v JOIN items i ON i.item_code = v.item_code
+        """
+        # app_catalog が空（DataManifest.json なしで起動した）ときは、絞らずに全商品から選ぶ
+        if app_only and conn.execute("SELECT 1 FROM app_catalog LIMIT 1").fetchone():
+            sql += " WHERE v.item_code IN (SELECT item_code FROM app_catalog)"
+        rows = conn.execute(sql).fetchall()
 
-    candidates = [
-        (r["item_code"], np.array(json.loads(r["vector_json"]), dtype=float))
-        for r in all_vecs
-        if r["item_code"] not in evaluated
-    ]
-
+    candidates = [r for r in rows if r["item_code"] not in evaluated]
     if not candidates:
         return []
 
     if pref is None:
         # LIKEが無い場合はランダムスコア
         import random
-        result = [{"item_code": c, "score": round(random.uniform(0.1, 0.5), 4)} for c, _ in candidates]
+        result = [{"item_code": r["item_code"], "score": round(random.uniform(0.1, 0.5), 4), "reasons": []}
+                  for r in candidates]
         result.sort(key=lambda x: x["score"], reverse=True)
         return result[:limit]
 
-    codes  = [c for c, _ in candidates]
-    matrix = np.array([v for _, v in candidates])
+    matrix = np.array([json.loads(r["vector_json"]) for r in candidates], dtype=float)
     sims   = cosine_similarity(pref.reshape(1, -1), matrix)[0]
 
-    ranked = sorted(zip(codes, sims), key=lambda x: x[1], reverse=True)
-    return [{"item_code": c, "score": round(float(s), 4)} for c, s in ranked[:limit]]
+    order = sorted(range(len(candidates)),
+                   key=lambda k: (round(float(sims[k]), 4), candidates[k]["review_count"]),
+                   reverse=True)[:limit]
+    return [
+        {
+            "item_code": candidates[k]["item_code"],
+            "score":     round(float(sims[k]), 4),
+            "reasons":   _reasons(pref, matrix[k]),
+        }
+        for k in order
+    ]

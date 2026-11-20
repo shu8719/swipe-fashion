@@ -16,22 +16,19 @@ final class TasteStore: ObservableObject {
         diagnosisCount = UserDefaults.standard.integer(forKey: countKey)
     }
 
-    /// 手元の LIKE をサーバーへ送り直し、届き終わってから説明文を取りに行く
-    /// （先に取ると、サーバー側の LIKE が10件に届く前で空が返る）。
-    /// syncLikes は並列・タイムアウト5秒なので、サーバー停止時も数秒で抜ける
-    func load(likedItemCodes: [String]) async {
-        guard likedItemCodes.count >= SwipeViewModel.tasteInterval else {
+    /// 説明文を取りに行く。手元の LIKE は、呼び出す前にサーバーへ送り直しておく
+    /// （先に取ると、サーバー側の LIKE が10件に届く前で空が返る。RecommendationsView が送り直してから呼ぶ）
+    func load(likeCount: Int) async {
+        guard likeCount >= SwipeViewModel.tasteInterval else {
             text = nil
             return
         }
-        await ActionService.syncLikes(itemCodes: likedItemCodes)
-        guard !Task.isCancelled else { return }
 
         // 取得は1回だけ試みる（失敗しても読み込み中の表示を出し続けない）
         isFetching = true
         defer { isFetching = false }
         do {
-            let resp = try await RecommendService.fetchTaste()
+            let resp = try await TasteService.fetchTaste()
             guard let desc = resp.description, !desc.isEmpty else { return }
             if desc != UserDefaults.standard.string(forKey: lastTextKey) {
                 diagnosisCount += 1

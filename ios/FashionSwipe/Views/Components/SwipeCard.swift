@@ -46,7 +46,7 @@ struct SwipeCard: View {
             }
             .clipped()
             .overlay(alignment: .topLeading) {
-                if let tag = MockDataService.itemType(for: item.id)?.displayName {
+                if let tag = ProductCatalog.itemType(for: item.id)?.displayName {
                     Text(tag)
                         .typography(Theme.Typography.labelMedium)
                         .foregroundStyle(Theme.Colors.onSurface)
