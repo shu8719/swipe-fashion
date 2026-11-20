@@ -9,6 +9,7 @@ struct SwipeView: View {
     @State private var productToOpen: Item?
     #if DEBUG
     @EnvironmentObject private var navigation: AppNavigation
+    @EnvironmentObject private var taste: TasteStore
     #endif
 
     private let threshold: CGFloat = 120
@@ -52,14 +53,29 @@ struct SwipeView: View {
     }
 
     #if DEBUG
-    /// README の GIF 用。ドラッグで LIKE → ドラッグで SKIP → 取り消し → LIKE → おすすめ画面、の順に自動で見せる。
+    /// README の GIF 用。ドラッグで LIKE → ドラッグで SKIP → LIKE → おすすめ画面（トップス）、の順に自動で見せる。
     /// カードは指でドラッグしたときと同じ offset を動かし、飛ばすところはボタンやドラッグと同じ performFlyOut を使う
     private func playDemo() async {
         func wait(_ seconds: Double) async { try? await Task.sleep(for: .seconds(seconds)) }
+        // 指のドラッグと同じように、offset を少しずつ更新する（カードにはドラッグ用のばねのアニメーションが付いているので、
+        // 一度に大きく動かすと一瞬で動いて止まったように見える）
+        func move(to x: CGFloat, over seconds: Double, accelerate: Bool = false) async {
+            let steps = max(1, Int(seconds * 60))
+            let start = offset.width
+            for i in 1...steps {
+                let t = Double(i) / Double(steps)
+                // 引っぱるときはゆっくり動き出してゆっくり止まる。離したあとは加速しながら飛んでいく
+                let eased = accelerate ? t * t : t * t * (3 - 2 * t)
+                offset = CGSize(width: start + (x - start) * eased, height: 6 * eased)
+                try? await Task.sleep(for: .seconds(seconds / Double(steps)))
+            }
+        }
         func dragAndRelease(_ direction: SwipeDirection) async {
-            let x: CGFloat = direction == .like ? threshold + 30 : -(threshold + 30)
-            withAnimation(.easeInOut(duration: 0.7)) { offset = CGSize(width: x, height: 6) }
-            await wait(0.9)
+            let sign: CGFloat = direction == .like ? 1 : -1
+            await move(to: sign * (threshold + 30), over: 0.6)   // スタンプが出るところまで引っぱる
+            await wait(0.3)                                        // スタンプが読めるくらい一瞬止める
+            // 離して画面の外へ。シミュレータの録画は速い動きのコマを落とすので、画面の外に出きるまで少しゆっくり動かす
+            await move(to: sign * 480, over: 0.5, accelerate: true)
             performFlyOut(direction: direction)
             await wait(1.0)
         }
@@ -79,15 +95,17 @@ struct SwipeView: View {
         await wait(2.0)
         await dragAndRelease(.like)
         await dragAndRelease(.skip)
-        viewModel.undoLastSwipe()
-        await wait(1.2)
+        // 取り消しはボタンを押す様子が映らず、カードが急に戻ったように見えるので、デモでは使わない
         await dragAndRelease(.like)
+        // おすすめ画面を開く前に、サーバーのおすすめと診断を取っておく
+        // （開いた直後の、端末内の並びと「準備中」が一瞬映らないように）
+        await ActionService.syncLikes(itemCodes: viewModel.likedItems.map(\.itemCode))
+        await viewModel.loadServerRecommendations()
+        await taste.load(likeCount: viewModel.likedItems.count)
+        // 服だけが並ぶよう、おすすめはトップスで絞った状態で見せる
+        viewModel.recommendationType = .tops
         navigation.selectedTab = .recommend
         await wait(4.0)
-        viewModel.recommendationType = .tops
-        await wait(3.0)
-        viewModel.recommendationType = .all
-        await wait(1.5)
     }
     #endif
 

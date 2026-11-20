@@ -7,7 +7,7 @@ LIKE が10件たまると、AI が「あなたはこういう服が好きな傾�
 私（shu）は企画の立案とチームの進行、iOS アプリ、楽天 API からの商品データの取得を担当しています。
 推薦の精度だけでなく、**入力の手間をかけずに好みを集め、その好みを言葉にして返すこと**を重視して設計しています。
 
-<p align="center"><img src="docs/screens/demo.gif" width="280" alt="スワイプで LIKE / SKIP し、取り消してから、おすすめ画面で AI スタイル診断と理由付きのおすすめを見る様子"></p>
+<p align="center"><img src="docs/screens/demo.gif" width="280" alt="スワイプで LIKE / SKIP してから、おすすめ画面で AI スタイル診断と理由付きのおすすめを見る様子"></p>
 
 ## 特徴
 
