@@ -31,7 +31,7 @@
 | iOS アプリ | Swift / SwiftUI |
 | サーバー | Python / Flask / SQLite |
 | 推薦 | scikit-learn / NumPy（22次元のタグとコサイン類似度） |
-| AI スタイル診断 | Gemini |
+| AI スタイル診断 | Gemini 3.5 Flash |
 | 商品データ | 楽天市場 商品検索 API（440キーワード・12,266件） |
 | テスト | pytest |
 
