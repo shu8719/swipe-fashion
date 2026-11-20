@@ -1,23 +1,48 @@
-"""AI-05: ユーザー嗜好説明文生成。LLM_PROVIDER に応じて切り替え。"""
+"""ユーザーの好みの説明文を作る。LLM_PROVIDER に応じて LLM を切り替える。"""
 import json
+import re
+from collections import Counter
 import requests
 from datetime import datetime, timezone
 from backend import config
 from backend.db import get_conn
 
 _PROMPT_TEMPLATE = """\
-あなたはファッションスタイリストAIです。以下のユーザー情報をもとに、
-そのユーザーのファッション嗜好を自然で親しみやすい日本語で80〜120字で説明してください。
+あなたはファッションスタイリストです。以下は、あるユーザーが LIKE した服の集計です。
+このユーザーのファッションの好みを、自然で親しみやすい日本語で80〜120字で説明してください。
 
-【好きなスタイルタグ TOP3】：{top_tags}
-【よくLIKEするショップ】：{top_shops}
-【最近LIKEした商品】：{liked_items_summary}
-【ユーザー属性】：{age}代 {gender} {region}在住
-
-※出力は説明文のみ。箇条書き不可。ショップ名やアイテムの傾向を1〜2個具体的に入れること。\
+【よく LIKE するタグ（多い順）】：{top_tags}
+【よく選ぶ価格帯】：{price_range}
+【よく LIKE するショップ】：{top_shops}
+【最近 LIKE した商品】：{liked_items_summary}
+{user_line}
+※出力は説明文のみ。箇条書きは使わない。タグ・ショップ・アイテムの傾向を1〜2個具体的に入れること。\
 """
 
 _LIKE_THRESHOLD = 10
+
+# 価格帯タグ（低 / 中 / 高）を、LLM に渡すときの言い方に直す
+_PRICE_LABELS = {"低": "3,000円未満", "中": "3,000〜10,000円", "高": "10,000円超"}
+
+
+def _short_name(name: str, limit: int = 30) -> str:
+    """商品名から【送料無料】などの括弧書きを外し、長すぎる部分を切る。"""
+    name = re.sub(r"【[^】]*】|［[^］]*］|\[[^\]]*\]", "", name or "").strip()
+    return name[:limit]
+
+
+def _user_line(user) -> str:
+    """分かっている属性だけを並べる（端末ログインのユーザーは属性が空なので、その行ごと省く）。"""
+    if not user:
+        return ""
+    parts = []
+    if user["age"]:
+        parts.append(f"{user['age'] // 10 * 10}代")
+    if user["gender"]:
+        parts.append(user["gender"])
+    if user["region"]:
+        parts.append(f"{user['region']}在住")
+    return f"【ユーザー属性】：{' '.join(parts)}" if parts else ""
 
 
 def _get_user_context(user_id: int) -> dict:
@@ -26,46 +51,42 @@ def _get_user_context(user_id: int) -> dict:
             "SELECT age, gender, region FROM users WHERE user_id=?", (user_id,)
         ).fetchone()
 
-        likes = conn.execute(
+        # 商品ごとに1行（タグと JOIN するとショップがタグの数だけ数えられてしまうため、分けて取る）
+        liked = conn.execute(
             """
-            SELECT i.item_name, i.shop_name, it.tag_category, it.tag_value
+            SELECT i.item_name, i.shop_name
             FROM user_actions ua
             JOIN items i ON i.item_code = ua.item_code
-            JOIN item_tags it ON it.item_code = ua.item_code
             WHERE ua.user_id=? AND ua.action='LIKE'
-            ORDER BY ua.created_at DESC
+            ORDER BY ua.created_at DESC, ua.action_id DESC
             """,
             (user_id,),
         ).fetchall()
 
-        like_count = conn.execute(
-            "SELECT COUNT(*) AS cnt FROM user_actions WHERE user_id=? AND action='LIKE'",
+        tag_rows = conn.execute(
+            """
+            SELECT it.tag_category, it.tag_value, COUNT(*) AS cnt
+            FROM user_actions ua
+            JOIN item_tags it ON it.item_code = ua.item_code
+            WHERE ua.user_id=? AND ua.action='LIKE'
+            GROUP BY it.tag_category, it.tag_value
+            ORDER BY cnt DESC, it.tag_value
+            """,
             (user_id,),
-        ).fetchone()["cnt"]
+        ).fetchall()
 
-    tag_freq: dict[str, int] = {}
-    shop_freq: dict[str, int] = {}
-    liked_names: list[str] = []
-    for row in likes:
-        key = f"{row['tag_category']}:{row['tag_value']}"
-        tag_freq[key] = tag_freq.get(key, 0) + 1
-        if row["tag_category"] == "style" and row["tag_value"] not in liked_names:
-            liked_names.append(row["tag_value"])
-        shop = row["shop_name"] or ""
-        if shop:
-            shop_freq[shop] = shop_freq.get(shop, 0) + 1
-
-    top_tags  = sorted(tag_freq,  key=lambda k: tag_freq[k],  reverse=True)[:3]
-    top_shops = sorted(shop_freq, key=lambda k: shop_freq[k], reverse=True)[:3]
+    top_tags = [r["tag_value"] for r in tag_rows if r["tag_category"] != "price_range"][:3]
+    price = next((r["tag_value"] for r in tag_rows if r["tag_category"] == "price_range"), None)
+    shops = Counter(r["shop_name"] for r in liked if r["shop_name"])
+    names = [_short_name(r["item_name"]) for r in liked[:5]]
 
     return {
-        "top_tags":           "、".join(top_tags) or "まだデータなし",
-        "top_shops":          "、".join(top_shops) or "なし",
-        "liked_items_summary": "、".join(liked_names[:5]) or "なし",
-        "age":    str(user["age"] // 10 * 10) if user and user["age"] else "不明",
-        "gender": (user["gender"] or "不明") if user else "不明",
-        "region": (user["region"] or "不明") if user else "不明",
-        "like_count": like_count,
+        "top_tags":            "、".join(top_tags) or "まだ特徴なし",
+        "price_range":         _PRICE_LABELS.get(price, "不明"),
+        "top_shops":           "、".join(shop for shop, _ in shops.most_common(3)) or "なし",
+        "liked_items_summary": "、".join(n for n in names if n) or "なし",
+        "user_line":           _user_line(user),
+        "like_count":          len(liked),
     }
 
 

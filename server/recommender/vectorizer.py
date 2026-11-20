@@ -1,10 +1,10 @@
-"""AI-01: 楽天商品テキスト → 22次元タグベクトル変換。"""
+"""楽天の商品テキスト → 22次元のタグベクトル。"""
 import json
 import re
 import numpy as np
 from backend.db import get_conn
 
-# ---- タグ定義（企画書3-1準拠 22次元）----
+# ---- タグ定義（22次元）----
 _ALL_TAGS = [
     # style (6)
     "韓国系", "ストリート", "カジュアル", "きれいめ", "モード", "ワーク",
@@ -48,39 +48,44 @@ _KEYWORD_MAP: list[tuple[list[str], str]] = [
 ]
 
 
-def extract_tags(text: str, item_price: int = 0) -> dict[str, str]:
-    """テキストから 22次元タグ辞書 {category: value} を生成する。"""
-    matched: dict[str, str] = {}
-    cat_map = {
-        "韓国系":"style","ストリート":"style","カジュアル":"style",
-        "きれいめ":"style","モード":"style","ワーク":"style",
-        "モノトーン":"color","アースカラー":"color","ビビッド":"color","ペールトーン":"color",
-        "オーバーサイズ":"silhouette","スリム":"silhouette",
-        "リラックス":"silhouette","タイト":"silhouette",
-        "デニム":"material","ニット":"material","コットン":"material",
-        "レザー":"material","シアー":"material",
-    }
+# タグ → カテゴリ（style / color / silhouette / material）
+_TAG_CATEGORY: dict[str, str] = {
+    **{t: "style"      for t in _ALL_TAGS[0:6]},
+    **{t: "color"      for t in _ALL_TAGS[6:10]},
+    **{t: "silhouette" for t in _ALL_TAGS[10:14]},
+    **{t: "material"   for t in _ALL_TAGS[14:19]},
+}
+
+# 商品名・キャッチコピーでの一致は、長い商品説明での一致より重く数える
+_TITLE_WEIGHT = 3
+
+
+def extract_tags(title: str, item_price: int = 0, caption: str = "") -> dict[str, str]:
+    """商品名・キャッチコピー（title）と商品説明（caption）から、カテゴリごとにタグを1つ選ぶ。
+
+    カテゴリごとに、キーワードが当たった回数（title は _TITLE_WEIGHT 倍）が一番多いタグを選ぶ。
+    どのキーワードにも当たらないカテゴリは空のままにする。
+    以前は style が空のとき「カジュアル」で埋めていたが、そのせいで商品の72%がカジュアルになり、
+    好みの違いが出なかった。価格帯だけは価格から必ず決める。
+    """
+    scores: dict[str, dict[str, int]] = {}
     for keywords, tag in _KEYWORD_MAP:
-        if any(kw in text for kw in keywords):
-            cat = cat_map.get(tag)
-            if cat and cat not in matched:
-                matched[cat] = tag
+        hits = (sum(title.count(kw) for kw in keywords) * _TITLE_WEIGHT
+                + sum(caption.count(kw) for kw in keywords))
+        if hits:
+            scores.setdefault(_TAG_CATEGORY[tag], {})[tag] = hits
 
-    # 価格帯（item_price が 0 のとき style フォールバック）
-    if item_price > 0:
-        if item_price < 3000:
-            matched["price_range"] = "低"
-        elif item_price <= 10000:
-            matched["price_range"] = "中"
-        else:
-            matched["price_range"] = "高"
-    else:
+    # 同点のときは _KEYWORD_MAP で先に書いたタグを選ぶ（max は最初の最大値を返す）
+    matched = {cat: max(tags, key=tags.get) for cat, tags in scores.items()}
+
+    if item_price <= 0:
         matched["price_range"] = "中"
-
-    # style がマッチしない場合のフォールバック
-    if "style" not in matched:
-        matched["style"] = "カジュアル"
-
+    elif item_price < 3000:
+        matched["price_range"] = "低"
+    elif item_price <= 10000:
+        matched["price_range"] = "中"
+    else:
+        matched["price_range"] = "高"
     return matched
 
 
@@ -93,31 +98,36 @@ def tags_to_vector(tags: dict[str, str]) -> np.ndarray:
     return vec
 
 
-def vectorize_item(item_code: str) -> np.ndarray | None:
-    """DB の商品を vectorize して item_vectors に保存し、ベクトルを返す。"""
-    with get_conn() as conn:
-        row = conn.execute(
-            "SELECT item_name, catchcopy, item_caption, item_price FROM items WHERE item_code=?",
-            (item_code,),
-        ).fetchone()
-    if not row:
-        return None
+_ITEM_TEXT_SQL = "SELECT item_code, item_name, catchcopy, item_caption, item_price FROM items"
 
-    text = " ".join(filter(None, [row["item_name"], row["catchcopy"], row["item_caption"]]))
-    tags = extract_tags(text, row["item_price"] or 0)
-    vec  = tags_to_vector(tags)
 
-    with get_conn() as conn:
-        conn.execute(
-            "INSERT OR REPLACE INTO item_vectors (item_code, vector_json) VALUES (?,?)",
-            (item_code, json.dumps(vec.tolist())),
-        )
-        for cat, val in tags.items():
-            conn.execute(
-                "INSERT OR IGNORE INTO item_tags VALUES (?,?,?)",
-                (item_code, cat, val),
-            )
+def _tags_for_row(row) -> dict[str, str]:
+    title = " ".join(filter(None, [row["item_name"], row["catchcopy"]]))
+    return extract_tags(title, row["item_price"] or 0, row["item_caption"] or "")
+
+
+def _save_vector(conn, item_code: str, tags: dict[str, str]) -> np.ndarray:
+    """ベクトルとタグを保存する。辞書を変えたときに古いタグが残らないよう、タグは入れ替える。"""
+    vec = tags_to_vector(tags)
+    conn.execute(
+        "INSERT OR REPLACE INTO item_vectors (item_code, vector_json) VALUES (?,?)",
+        (item_code, json.dumps(vec.tolist())),
+    )
+    conn.execute("DELETE FROM item_tags WHERE item_code=?", (item_code,))
+    conn.executemany(
+        "INSERT INTO item_tags (item_code, tag_category, tag_value) VALUES (?,?,?)",
+        [(item_code, cat, val) for cat, val in tags.items()],
+    )
     return vec
+
+
+def vectorize_item(item_code: str) -> np.ndarray | None:
+    """DB の商品1件をベクトル化して保存し、ベクトルを返す。"""
+    with get_conn() as conn:
+        row = conn.execute(_ITEM_TEXT_SQL + " WHERE item_code=?", (item_code,)).fetchone()
+        if not row:
+            return None
+        return _save_vector(conn, item_code, _tags_for_row(row))
 
 
 def get_vector(item_code: str) -> np.ndarray | None:
@@ -130,11 +140,12 @@ def get_vector(item_code: str) -> np.ndarray | None:
 
 
 def vectorize_all() -> int:
-    """全商品をベクトル化して保存し、処理件数を返す。"""
+    """全商品をベクトル化して保存し、処理件数を返す。
+
+    1つの接続・1回のコミットでまとめて処理する（商品ごとに接続を開いていたときは、1万2千件で約10秒かかっていた）。
+    """
     with get_conn() as conn:
-        codes = [r["item_code"] for r in conn.execute("SELECT item_code FROM items").fetchall()]
-    count = 0
-    for code in codes:
-        if vectorize_item(code) is not None:
-            count += 1
-    return count
+        rows = conn.execute(_ITEM_TEXT_SQL).fetchall()
+        for row in rows:
+            _save_vector(conn, row["item_code"], _tags_for_row(row))
+    return len(rows)
