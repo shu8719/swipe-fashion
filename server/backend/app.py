@@ -29,20 +29,23 @@ def create_app() -> Flask:
 
 if __name__ == "__main__":
     init_db()
-    
+
     rakuten_json_dir = os.getenv("RAKUTEN_JSON_DIR", "")
     if rakuten_json_dir:
         loaded = load_rakuten_json_dir(rakuten_json_dir)
         if loaded > 0:
-            print(f"ベクトル化開始...")
+            print("ベクトル化開始...")
             vec_count = vectorize_all()
             print(f"ベクトル化完了: {vec_count}件")
     else:
         seed_dummy_items()
-        print("DB初期化・ダミーデータ投入 完了やね")
-    
+        print("DB を初期化し、テスト用のダミーデータを入れました")
+
     app = create_app()
     host = os.getenv("HOST", "0.0.0.0")
     port = int(os.getenv("PORT", "5001"))
-    print(f"Flask API 起動: http://{host}:{port}")
-    app.run(host=host, port=port, debug=True)
+    # デバッグモードのデバッガは、つないできた相手がサーバー上でコードを実行できてしまう。
+    # 0.0.0.0（同じネットワークの全員）に公開するので、FLASK_DEBUG=1 を付けたときだけ有効にする
+    debug = os.getenv("FLASK_DEBUG", "0") == "1"
+    print(f"Flask API 起動: http://{host}:{port}（デバッグモード: {'on' if debug else 'off'}）")
+    app.run(host=host, port=port, debug=debug)

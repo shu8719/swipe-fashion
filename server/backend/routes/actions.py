@@ -15,12 +15,12 @@ def post_action():
     action    = str(data.get("action", "")).upper()
 
     if not item_code or action not in _VALID_ACTIONS:
-        return jsonify({"error": "item_code と action(LIKE/SKIP) が必要やよ"}), 400
+        return jsonify({"error": "item_code と action（LIKE / SKIP）を指定してください"}), 400
 
     already_recorded = False
     with get_conn() as conn:
         if not conn.execute("SELECT 1 FROM items WHERE item_code=?", (item_code,)).fetchone():
-            return jsonify({"error": "その商品は存在しないね"}), 404
+            return jsonify({"error": "指定された商品が見つかりません"}), 404
         already_recorded = conn.execute(
             """
             SELECT 1 FROM user_actions

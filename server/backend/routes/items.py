@@ -9,17 +9,18 @@ def _row_to_rakuten(row) -> dict:
     """DBRow → Swift の Item が JSONDecoder で読める楽天互換形式に変換。"""
     d = dict(row)
     image_url = d.get("image_url") or ""
+    # Swift 側の Item は項目が null だと読めないので、空の値で埋める
     return {
-        "itemCode":      d.get("item_code", ""),
-        "itemName":      d.get("item_name", ""),
-        "catchcopy":     d.get("catchcopy", ""),
-        "itemPrice":     d.get("item_price", 0),
-        "shopName":      d.get("shop_name", ""),
-        "reviewAverage": d.get("review_average", 0.0),
-        "reviewCount":   d.get("review_count", 0),
-        "itemUrl":       d.get("item_url", ""),
+        "itemCode":      d.get("item_code") or "",
+        "itemName":      d.get("item_name") or "",
+        "catchcopy":     d.get("catchcopy") or "",
+        "itemPrice":     d.get("item_price") or 0,
+        "shopName":      d.get("shop_name") or "",
+        "reviewAverage": d.get("review_average") or 0.0,
+        "reviewCount":   d.get("review_count") or 0,
+        "itemUrl":       d.get("item_url") or "",
         "mediumImageUrls": [{"imageUrl": image_url}],
-        "genreId":       d.get("genre_id", 0),
+        "genreId":       d.get("genre_id") or 0,
     }
 
 
@@ -50,5 +51,5 @@ def item_detail(item_code: str):
             "SELECT * FROM items WHERE item_code=?", (item_code,)
         ).fetchone()
     if not row:
-        return jsonify({"error": "商品が見つからへんね"}), 404
+        return jsonify({"error": "商品が見つかりません"}), 404
     return jsonify(_row_to_rakuten(row))

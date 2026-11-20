@@ -10,10 +10,10 @@ def register():
     data = request.get_json(force=True) or {}
     email, password = data.get("email","").strip(), data.get("password","")
     if not email or not password:
-        return jsonify({"error": "email と password は必須やよ"}), 400
+        return jsonify({"error": "email と password を指定してください"}), 400
     with get_conn() as conn:
         if conn.execute("SELECT 1 FROM users WHERE email=?", (email,)).fetchone():
-            return jsonify({"error": "そのメールは既に登録済みやね"}), 409
+            return jsonify({"error": "このメールアドレスはすでに登録されています"}), 409
         cur = conn.execute(
             "INSERT INTO users (email, password_hash, age, gender, region) VALUES (?,?,?,?,?)",
             (email, hash_password(password), data.get("age"), data.get("gender",""), data.get("region","")),
@@ -27,11 +27,11 @@ def login():
     data = request.get_json(force=True) or {}
     email, password = data.get("email","").strip(), data.get("password","")
     if not email or not password:
-        return jsonify({"error": "email と password は必須やよ"}), 400
+        return jsonify({"error": "email と password を指定してください"}), 400
     with get_conn() as conn:
         row = conn.execute("SELECT user_id, password_hash FROM users WHERE email=?", (email,)).fetchone()
     if not row or not check_password(password, row["password_hash"]):
-        return jsonify({"error": "メールかパスワードが違うね"}), 401
+        return jsonify({"error": "メールアドレスかパスワードが違います"}), 401
     return jsonify({"user_id": row["user_id"], "token": create_token(row["user_id"])})
 
 
@@ -41,12 +41,12 @@ def device_auth():
     data      = request.get_json(force=True) or {}
     device_id = data.get("device_id", "").strip()
     if not device_id:
-        return jsonify({"error": "device_id は必須やよ"}), 400
+        return jsonify({"error": "device_id を指定してください"}), 400
+    # アプリは通信が 401 になると一斉にログインし直すので、同じ device_id が同時に届くことがある。
+    # 「なければ登録」をぶつからない形で行い、そのあと読み直す
     with get_conn() as conn:
-        row = conn.execute("SELECT user_id FROM users WHERE device_id=?", (device_id,)).fetchone()
-        if row:
-            user_id = row["user_id"]
-        else:
-            cur = conn.execute("INSERT INTO users (device_id) VALUES (?)", (device_id,))
-            user_id = cur.lastrowid
+        conn.execute("INSERT OR IGNORE INTO users (device_id) VALUES (?)", (device_id,))
+        user_id = conn.execute(
+            "SELECT user_id FROM users WHERE device_id=?", (device_id,)
+        ).fetchone()["user_id"]
     return jsonify({"user_id": user_id, "token": create_token(user_id)})

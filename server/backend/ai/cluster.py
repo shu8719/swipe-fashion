@@ -84,7 +84,7 @@ def run_clustering(n_clusters: int = 4) -> dict:
             valid_ids.append(uid)
 
     if len(valid_ids) < n_clusters:
-        return {"status": "skipped", "reason": f"ユーザー数({len(valid_ids)})がクラスタ数({n_clusters})より少ないね"}
+        return {"status": "skipped", "reason": f"ユーザー数（{len(valid_ids)}）がクラスタ数（{n_clusters}）より少ないため、スキップしました"}
 
     X = np.array(vectors)
     scaler = StandardScaler()
