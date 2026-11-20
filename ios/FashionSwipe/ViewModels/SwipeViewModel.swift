@@ -120,6 +120,13 @@ final class SwipeViewModel: ObservableObject {
     }
 
     #if DEBUG
+    /// README の GIF 用（SwipeView のデモ再生）に、スワイプで最初に出すカードを決める
+    func debugSetCards(_ items: [Item]) {
+        let ids = Set(items.map(\.id))
+        cards = items + cards.filter { !ids.contains($0.id) }
+        lastSwipe = nil
+    }
+
     /// スクリーンショット用（DevTools/ScreenshotScenario）に LIKE を置き換える
     func debugReplaceLikes(with items: [Item]) {
         likedItems = items
@@ -212,6 +219,7 @@ final class SwipeViewModel: ObservableObject {
         if isPersonalized {
             let fromServer = serverRanking
                 .map(\.item)
+                .filter { ProductCatalog.contains($0.id) }   // 子供服など、アプリで出さない商品を外す
                 .filter { !likedIds.contains($0.id) }
                 .filter { recommendationType == .all || ProductCatalog.itemType(for: $0.id) == recommendationType }
                 .prefix(20)

@@ -133,8 +133,36 @@ enum ProductCatalog {
             fileCache[file] = []        // ② 見つからない/失敗も空でキャッシュし再探索を防ぐ
             return []
         }
-        let items = response.Items.map { $0.Item }
+        let items = response.Items.map { $0.Item }.filter { isForAdults($0.itemName) }
         fileCache[file] = items         // ③ デコード結果を保存
         return items
+    }
+
+    /// アプリに載っている商品か（サーバーのおすすめから、アプリで出さない商品を外すのに使う）
+    static func contains(_ itemCode: String) -> Bool {
+        if allItemCodes == nil {
+            allItemCodes = Set(filesForCategory(.all).flatMap { load(file: $0) }.map(\.id))
+        }
+        return allItemCodes?.contains(itemCode) ?? false
+    }
+    private static var allItemCodes: Set<String>?
+
+    // MARK: - 大人向けでない商品を外す
+
+    /// 楽天のキーワード検索（ロンパース・ジャンプスーツなど）には、子供服・ベビー服・マタニティの商品が混ざる。
+    /// 大人向けのアプリなので、商品名に子供向けの語があり、レディース / メンズの語がない商品は出さない
+    /// （「メンズ レディース キッズ」のような大人も着る商品や、「マタニティにも」と書いた大人の服は残す）
+    private static let kidsWords  = ["キッズ", "ベビー", "子供", "子ども", "こども", "マタニティ", "授乳",
+                                     "kids", "Kids", "KIDS", "BABY", "Baby"]
+    private static let adultWords = ["レディース", "レディス", "メンズ", "ladies", "Ladies", "LADIES",
+                                     "mens", "Mens", "MENS"]
+
+    static func isForAdults(_ itemName: String) -> Bool {
+        // 色名の「ベビーピンク」「ベビーブルー」は子供向けの意味ではない
+        let name = itemName.replacingOccurrences(of: "ベビーピンク", with: "")
+                           .replacingOccurrences(of: "ベビーブルー", with: "")
+        let looksKids = kidsWords.contains { name.contains($0) }
+        let saysAdult = adultWords.contains { name.contains($0) }
+        return !looksKids || saysAdult
     }
 }
